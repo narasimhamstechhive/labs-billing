@@ -1,0 +1,73 @@
+import Test from '../models/Test.js';
+
+// @desc Get all tests
+// @route GET /api/tests
+// @access Private
+export const getTests = async (req, res) => {
+    try {
+        const { page = 1, limit = 50 } = req.query; // Higher limit for tests as they are usually many
+        const query = { isDeleted: false };
+
+        const skip = (Number(page) - 1) * Number(limit);
+
+        const tests = await Test.find(query)
+            .populate('department', 'name')
+            .sort({ testName: 1 })
+            .skip(skip)
+            .limit(Number(limit));
+
+        const total = await Test.countDocuments(query);
+
+        res.json({
+            tests,
+            page: Number(page),
+            pages: Math.ceil(total / Number(limit)),
+            total
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc Create a test
+// @route POST /api/tests
+// @access Private (Admin/Manager)
+export const createTest = async (req, res) => {
+    try {
+        const test = await Test.create(req.body);
+        res.status(201).json(test);
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
+// @desc Update a test
+// @route PUT /api/tests/:id
+// @access Private (Admin/Manager)
+export const updateTest = async (req, res) => {
+    try {
+        const test = await Test.findById(req.params.id);
+        if (!test) return res.status(404).json({ message: 'Test not found' });
+
+        const updatedTest = await Test.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(updatedTest);
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
+// @desc Delete a test
+// @route DELETE /api/tests/:id
+// @access Private (Admin/Manager)
+export const deleteTest = async (req, res) => {
+    try {
+        const test = await Test.findById(req.params.id);
+        if (!test) return res.status(404).json({ message: 'Test not found' });
+
+        test.isDeleted = true;
+        await test.save();
+        res.json({ message: 'Test removed' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};

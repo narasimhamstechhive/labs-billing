@@ -1,0 +1,38 @@
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
+
+export const protect = async (req, res, next) => {
+    let token;
+
+    if (
+        req.headers.authorization &&
+        req.headers.authorization.startsWith('Bearer')
+    ) {
+        try {
+            token = req.headers.authorization.split(' ')[1];
+
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+            req.user = await User.findById(decoded.id).select('-password');
+
+            if (!req.user) {
+                return res.status(401).json({ message: 'User not found, please login again' });
+            }
+
+            next();
+        } catch (error) {
+            console.error('Auth Error:', error.message);
+            return res.status(401).json({ message: 'Session expired, please login again' });
+        }
+    } else {
+        return res.status(401).json({ message: 'No authorization token found' });
+    }
+};
+
+export const authorize = (...roles) => {
+    return (req, res, next) => {
+        // Since there is ONLY ONE USER (Lab Owner / Admin),
+        // we bypass role validation and allow all authenticated users.
+        next();
+    };
+};

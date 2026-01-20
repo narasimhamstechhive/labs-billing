@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Clinic Lab Report</title>
+</head>
+
+<body style="
+  margin:0;
+  padding:30px;
+  font-family:'Times New Roman', Times, serif;
+  background:#fff;
+  color:#000;
+">
+
+  <!-- PAGE BORDER -->
+  <div style="
+    max-width:600px;
+    max-height:auto;
+    margin:auto;
+    padding:20px;
+    border:1.5px solid #000;
+    font-size:14px;
+  ">
+
+    <!-- HEADER -->
+    <div style="display:flex; align-items:flex-start; padding-bottom:10px;">
+
+      <!-- LOGO -->
+      <div style="width:100px;">
+        {{LOGO_HTML}}
+      </div>
+
+      <!-- LAB NAME CENTER -->
+      <div style="flex:1; text-align:center;">
+       
+      </div>
+
+      <!-- HEADER RIGHT DETAILS -->
+      <div style="width:260px; text-align:right; font-size:13px; line-height:1.4;">
+         <h1 style="margin:0; font-size:26px; letter-spacing:1px;">{{LAB_NAME}}</h1>
+        <div>Contact: {{LAB_MOBILE}}</div>
+        <div>Email: {{LAB_EMAIL}}</div>
+       
+      </div>
+
+    </div>
+
+    <hr style="border:none; border-top:1px solid #000; margin:8px 0;">
+
+    <!-- PATIENT DETAILS -->
+    <table style="width:100%; font-size:14px;">
+      <tr>
+        <td style="width:50%; vertical-align:top;">
+          <p><b>Name</b> : {{PATIENT_NAME}}</p>
+          <p><b>Age / Gender</b> : {{PATIENT_AGE}} Years / {{PATIENT_GENDER}}</p>
+          <p><b>Referred By</b> : {{REFERRING_DOCTOR}}</p>
+          <p><b>Sample Type</b> : {{SAMPLE_TYPE}}</p>
+        </td>
+        <td style="width:50%; vertical-align:top;">
+          <p><b>Sample ID</b> : {{SAMPLE_ID}}</p>
+          <p><b>Reg. No</b> : {{REG_NO}}</p>
+          <p><b>Collected On</b> : {{COLLECTED_ON}}</p>
+          <p><b>Reported On</b> : {{REPORTED_ON}}</p>
+        </td>
+      </tr>
+    </table>
+
+    <hr style="border:none; border-top:1px dashed #000; margin:10px 0;">
+
+    <!-- DEPARTMENT -->
+    <div style="text-align:center; margin:15px 0;">
+      <h2 style="margin:0; font-size:18px;">{{DEPARTMENT_NAME}}</h2>
+      <p style="margin:5px 0; font-weight:bold;">
+        {{TEST_NAME}} REPORT
+      </p>
+    </div>
+
+    <hr style="border:none; border-top:1px dashed #000; margin:10px 0;">
+
+    <!-- RESULTS TABLE -->
+    <table style="width:100%; border-collapse:collapse; font-size:14px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:8px; border-bottom:1px solid #000;">Test Name</th>
+          <th style="text-align:left; padding:8px; border-bottom:1px solid #000;">Result</th>
+          <th style="text-align:left; padding:8px; border-bottom:1px solid #000;">Units</th>
+          <th style="text-align:left; padding:8px; border-bottom:1px solid #000;">Reference Range</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{TEST_RESULTS_ROWS}}
+      </tbody>
+    </table>
+
+    <hr style="border:none; border-top:1px dashed #000; margin:12px 0;">
+
+    <!-- INTERPRETATION CENTERED -->
+    <p style="text-align:center; font-size:14px;">
+      <b>Interpretation:</b> {{INTERPRETATION}}
+    </p>
+
+  </div>
+
+</body>
+</html>
+
