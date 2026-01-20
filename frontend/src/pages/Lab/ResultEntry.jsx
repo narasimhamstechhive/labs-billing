@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { reportsAPI } from '../../services/api';
 import { ClipboardList, AlertTriangle, CheckCircle2, ArrowLeft, Plus, Trash2, FileText, TestTube } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -31,8 +31,14 @@ const ResultEntry = () => {
     const handleSelectSample = (sample) => {
         setSelectedSample(sample);
         const initialResults = {};
-        sample.tests.forEach(t => {
-            const config = LAB_TESTS_CONFIG[t.testName] || LAB_TESTS_CONFIG[Object.keys(LAB_TESTS_CONFIG).find(k => t.testName.includes(k))]; // Exact or partial match
+
+        // Ensure tests array exists
+        const tests = sample.tests || [];
+
+        tests.forEach(t => {
+            const testName = t.testName || '';
+            const config = LAB_TESTS_CONFIG[testName] ||
+                LAB_TESTS_CONFIG[Object.keys(LAB_TESTS_CONFIG).find(k => testName && testName.includes(k))];
 
             initialResults[t._id] = {
                 value: '',
@@ -249,12 +255,12 @@ const ResultEntry = () => {
 
                                     <div className="mb-4">
                                         <h4 className="font-bold text-gray-900 text-lg group-hover:text-primary-600 transition-colors">
-                                            {s.patient.name}
+                                            {s.patient?.name || 'Unknown Patient'}
                                         </h4>
                                         <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
                                             <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 font-medium">#{s.sampleId}</span>
                                             <span>•</span>
-                                            <span>{s.patient.age}Y / {s.patient.gender.charAt(0)}</span>
+                                            <span>{s.patient?.age || 'N/A'}Y / {s.patient?.gender?.charAt(0) || 'U'}</span>
                                         </div>
                                     </div>
 
@@ -316,16 +322,16 @@ const ResultEntry = () => {
                     <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold text-xl">
-                                {selectedSample.patient.name.charAt(0)}
+                                {selectedSample.patient?.name?.charAt(0) || 'P'}
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold text-gray-900 leading-tight">{selectedSample.patient.name}</h2>
+                                <h2 className="text-lg font-bold text-gray-900 leading-tight">{selectedSample.patient?.name || 'Unknown'}</h2>
                                 <div className="text-sm text-gray-500 flex items-center gap-2 mt-0.5">
                                     <span className="font-mono font-medium text-gray-700">#{selectedSample.sampleId}</span>
                                     <span>•</span>
-                                    <span>{selectedSample.patient.age}Y</span>
+                                    <span>{selectedSample.patient?.age || 'N/A'}Y</span>
                                     <span>•</span>
-                                    <span>{selectedSample.patient.gender}</span>
+                                    <span>{selectedSample.patient?.gender || 'N/A'}</span>
                                 </div>
                             </div>
                         </div>
@@ -338,9 +344,11 @@ const ResultEntry = () => {
                     </div>
 
                     <div className="space-y-6">
-                        {selectedSample.tests.map(test => {
+                        {(selectedSample.tests || []).map(test => {
                             // Find config for this test
-                            const config = LAB_TESTS_CONFIG[test.testName] || LAB_TESTS_CONFIG[Object.keys(LAB_TESTS_CONFIG).find(k => test.testName.includes(k))];
+                            const testName = test.testName || '';
+                            const config = LAB_TESTS_CONFIG[testName] ||
+                                LAB_TESTS_CONFIG[Object.keys(LAB_TESTS_CONFIG).find(k => testName && testName.includes(k))];
 
                             return (
                                 <div key={test._id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">

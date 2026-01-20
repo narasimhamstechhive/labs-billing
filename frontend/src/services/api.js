@@ -31,6 +31,21 @@ api.interceptors.request.use(
     }
 );
 
+// Keep track of active toasts to prevent duplicates (spam)
+let lastToastMessage = '';
+let lastToastTime = 0;
+
+const showUniqueToast = (message, type = 'error') => {
+    const now = Date.now();
+    if (message === lastToastMessage && now - lastToastTime < 3000) return;
+
+    lastToastMessage = message;
+    lastToastTime = now;
+
+    if (type === 'error') toast.error(message);
+    else toast.success(message);
+};
+
 // Response Interceptor: Handle errors globally
 api.interceptors.response.use(
     (response) => response,
@@ -38,21 +53,26 @@ api.interceptors.response.use(
         // Handle 401 Unauthorized
         if (error.response && error.response.status === 401) {
             localStorage.removeItem('userInfo');
-            window.location.href = '/login';
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
             return Promise.reject(error);
         }
 
-        // Handle network errors
-        if (!error.response) {
-            console.error('Network Error:', error.message);
-            toast.error('Network error. Please check your connection.');
+        // Handle network errors (no response from server)
+        if (!error.response || error.code === 'ECONNABORTED' || error.message === 'Network Error') {
+            showUniqueToast('Network connection issue. Please check your internet or server status.');
             return Promise.reject(error);
         }
 
         // Handle server errors
         if (error.response.status >= 500) {
-            console.error('Server Error:', error.response.data);
-            toast.error(error.response.data?.message || 'Server error. Please try again later.');
+            const message = error.response.data?.message || 'Server is temporarily unavailable. Please try later.';
+            showUniqueToast(message);
+        } else if (error.response.status === 403) {
+            showUniqueToast('Access denied. You do not have permission for this action.');
+        } else if (error.response.status === 429) {
+            showUniqueToast('Too many requests. Please slow down and wait a moment.');
         }
 
         return Promise.reject(error);
@@ -139,7 +159,7 @@ export const samplesAPI = {
 // REPORTS API
 // ============================================
 export const reportsAPI = {
-    getPending: () => api.get('/reports/pending'),
+    getPending: (params) => api.get('/reports/pending', { params }),
     submit: (data) => api.post('/reports/submit', data),
     approve: (sampleId) => api.put(`/reports/approve/${sampleId}`),
     print: (sampleId) => api.get(`/reports/print/${sampleId}`, {
