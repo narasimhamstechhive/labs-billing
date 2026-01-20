@@ -2,7 +2,9 @@ import express from 'express';
 const router = express.Router();
 import { getSettings, updateSettings, uploadLogo } from '../controllers/settingsController.js';
 import { protect } from '../middlewares/authMiddleware.js';
-import upload from '../config/multer.js';
+import { storage } from '../config/cloudinary.js';
+import multer from 'multer';
+const upload = multer({ storage });
 
 router.route('/')
     .get(protect, getSettings)

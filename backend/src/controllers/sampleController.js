@@ -39,7 +39,8 @@ export const getSamples = async (req, res) => {
             .populate('tests', 'testName')
             .sort({ createdAt: -1 })
             .skip(skip)
-            .limit(Number(limit));
+            .limit(Number(limit))
+            .lean();
 
         const total = await Sample.countDocuments(query);
 

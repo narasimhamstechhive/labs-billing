@@ -156,7 +156,8 @@ export const getInvoices = asyncHandler(async (req, res) => {
         .populate('tests', 'testName price')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(Number(limit));
+        .limit(Number(limit))
+        .lean();
 
     const total = await Invoice.countDocuments(query);
 
@@ -350,9 +351,11 @@ export const printInvoice = asyncHandler(async (req, res) => {
     // Prepare logo URL
     let logoHtml = '';
     if (settings.logo) {
-        if (settings.logo.startsWith('data:image')) {
+        if (settings.logo.startsWith('data:image') || settings.logo.startsWith('http')) {
+            // Base64 or Cloudinary URL
             logoHtml = `<img src="${settings.logo}" alt="Lab Logo" style="max-width: 100px; max-height: 100px;">`;
         } else {
+            // Local relative path
             const baseUrl = req.protocol + '://' + req.get('host');
             const logoUrl = baseUrl + settings.logo;
             logoHtml = `<img src="${logoUrl}" alt="Lab Logo" style="max-width: 100px; max-height: 100px;">`;

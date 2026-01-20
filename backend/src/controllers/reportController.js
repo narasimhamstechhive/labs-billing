@@ -181,12 +181,14 @@ export const printReport = async (req, res) => {
         // Prepare logo HTML
         let logoHtml = '';
         if (settings.logo) {
-            if (settings.logo.startsWith('data:image')) {
-                logoHtml = `<img src="${settings.logo}" alt="Lab Logo">`;
+            if (settings.logo.startsWith('data:image') || settings.logo.startsWith('http')) {
+                // Base64 or Cloudinary URL
+                logoHtml = `<img src="${settings.logo}" alt="Lab Logo" style="max-height: 80px;">`;
             } else {
+                // Local relative path
                 const baseUrl = req.protocol + '://' + req.get('host');
                 const logoUrl = baseUrl + settings.logo;
-                logoHtml = `<img src="${logoUrl}" alt="Lab Logo">`;
+                logoHtml = `<img src="${logoUrl}" alt="Lab Logo" style="max-height: 80px;">`;
             }
         }
 

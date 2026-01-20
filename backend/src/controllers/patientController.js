@@ -65,9 +65,11 @@ export const getPatients = asyncHandler(async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
 
     const patients = await Patient.find(query)
+        .select('name mobile patientId age gender referringDoctor createdAt')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(Number(limit));
+        .limit(Number(limit))
+        .lean();
 
     const total = await Patient.countDocuments(query);
 
@@ -83,7 +85,7 @@ export const getPatients = asyncHandler(async (req, res) => {
 // @route GET /api/patients/:id
 // @access Private
 export const getPatientById = asyncHandler(async (req, res) => {
-    const patient = await Patient.findById(req.params.id);
+    const patient = await Patient.findById(req.params.id).lean();
     if (!patient) {
         res.status(404);
         throw new Error('Patient not found');

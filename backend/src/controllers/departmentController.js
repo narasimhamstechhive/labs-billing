@@ -5,7 +5,7 @@ import Department from '../models/Department.js';
 // @access Private
 export const getDepartments = async (req, res) => {
     try {
-        const departments = await Department.find({ isDeleted: false });
+        const departments = await Department.find({ isDeleted: false }).lean();
         res.json(departments);
     } catch (error) {
         res.status(500).json({ message: error.message });

@@ -52,22 +52,13 @@ export const uploadLogo = async (req, res) => {
             return res.status(400).json({ message: 'No file uploaded' });
         }
 
-        // For Vercel (serverless), files are in memory
-        // In production, consider using cloud storage (S3, Cloudinary, Vercel Blob)
-        if (process.env.VERCEL || !req.file.path) {
-            // Memory storage - convert to base64 for storage in database
-            const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-            res.status(200).json({
-                filePath: base64Image,
-                isBase64: true
-            });
-        } else {
-            // Disk storage - return file path
-            res.status(200).json({
-                filePath: `/uploads/${req.file.filename}`,
-                isBase64: false
-            });
-        }
+        // With Cloudinary storage, req.file.path is the secure URL
+        const filePath = req.file.path || req.file.secure_url;
+
+        res.status(200).json({
+            filePath,
+            isCloudinary: true
+        });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

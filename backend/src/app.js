@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import express from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import path from 'path';
 import helmet from 'helmet';
@@ -28,7 +29,8 @@ import { notFound, errorHandler } from './middlewares/errorMiddleware.js';
 
 const app = express();
 
-// Trust proxy for Vercel/CDNs
+// Optimization Middlewares
+app.use(compression());
 app.set('trust proxy', 1);
 
 // Security Middlewares

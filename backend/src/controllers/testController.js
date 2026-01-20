@@ -14,7 +14,8 @@ export const getTests = asyncHandler(async (req, res) => {
         .populate('department', 'name')
         .sort({ testName: 1 })
         .skip(skip)
-        .limit(Number(limit));
+        .limit(Number(limit))
+        .lean();
 
     const total = await Test.countDocuments(query);
 
