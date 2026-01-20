@@ -12,4 +12,8 @@ const patientSchema = new mongoose.Schema({
     history: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Sample' }] // Link to visits/samples
 }, { timestamps: true });
 
+// Add indexes for performance
+patientSchema.index({ name: 'text', mobile: 1 });
+patientSchema.index({ patientId: 1 });
+
 export default mongoose.model('Patient', patientSchema);

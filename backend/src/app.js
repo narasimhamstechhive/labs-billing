@@ -1,6 +1,7 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -25,9 +26,10 @@ import analyticsRoutes from './routes/analyticsRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js';
 
-dotenv.config();
-
 const app = express();
+
+// Trust proxy for Vercel/CDNs
+app.set('trust proxy', 1);
 
 // Security Middlewares
 app.use(helmet({
@@ -50,8 +52,10 @@ app.use('/api/', limiter);
 
 // Middleware
 app.use(cors({
-    origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175","https://labs-billing-frontend.vercel.app"],
-    credentials: true
+    origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "https://labs-billing-frontend.vercel.app"],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use(express.json({ limit: '1mb' })); // Reduced limit for security
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
@@ -96,6 +100,17 @@ app.use('/api/expenses', expenseRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
+
+// Global Unhandled Error Catching
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    // Application specific logging, throwing an error, or other logic here
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception thrown:', err);
+    // Consider restarting or exiting gracefully
+});
 
 // Only start server if not in Vercel serverless environment and not in test mode
 if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {

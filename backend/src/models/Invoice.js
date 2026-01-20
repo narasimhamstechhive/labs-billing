@@ -20,4 +20,9 @@ const invoiceSchema = new mongoose.Schema({
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
 
+// Add indexes for performance
+invoiceSchema.index({ invoiceIds: 1 });
+invoiceSchema.index({ patient: 1 });
+invoiceSchema.index({ createdAt: -1 }); // Fast sorting for transactions
+
 export default mongoose.model('Invoice', invoiceSchema);
