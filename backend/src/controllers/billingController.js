@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import asyncHandler from 'express-async-handler';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,559 +19,480 @@ const generateSampleId = () => 'SMP' + Date.now().toString().slice(-6) + Math.fl
 // @desc Create Invoice (and Samples)
 // @route POST /api/billing/create
 // @access Private
-export const createInvoice = async (req, res) => {
-    try {
-        const { patientId, tests, discount, paidAmount, paymentMode } = req.body;
+export const createInvoice = asyncHandler(async (req, res) => {
+    const { patientId, tests, discount, paidAmount, paymentMode, payments } = req.body;
 
-        // Calculate Totals
-        // Fetch tests to get prices and sample types
-        const testDetails = await Test.find({ _id: { $in: tests } });
+    // Calculate Totals
+    // Fetch tests to get prices and sample types
+    const testDetails = await Test.find({ _id: { $in: tests } });
 
-        if (testDetails.length !== tests.length) {
-            return res.status(400).json({ message: 'One or more tests not found' });
-        }
-
-        const totalAmount = testDetails.reduce((acc, test) => acc + test.price, 0);
-        const finalAmount = totalAmount - (discount || 0);
-
-        // Ensure no negative balance
-        const balance = Math.max(0, finalAmount - (paidAmount || 0));
-
-        // Any extra payment is profit
-        const profit = Math.max(0, (paidAmount || 0) - finalAmount);
-
-        const status = balance <= 0 ? 'Paid' : (paidAmount > 0 ? 'Partial' : 'Unpaid');
-
-        const invoice = await Invoice.create({
-            invoiceIds: generateInvoiceId(),
-            patient: patientId,
-            tests,
-            totalAmount,
-            discount,
-            finalAmount,
-            paidAmount,
-            balance,
-            profit,
-            status,
-            paymentMode,
-            createdBy: req.user._id
-        });
-
-        // Create a single Sample for the entire invoice (grouping all tests)
-        console.log(`[BILLING] Creating SINGLE sample for Invoice: ${invoice.invoiceIds}, Patient: ${patientId}`);
-
-        const sampleTypes = [...new Set(testDetails.map(t => t.sampleType || 'Other'))];
-        const combinedSampleType = sampleTypes.join(', ');
-
-        const sampleId = 'SMP-G-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100);
-
-        const newSample = await Sample.create({
-            sampleId: sampleId,
-            patient: patientId,
-            invoice: invoice._id,
-            sampleType: combinedSampleType,
-            tests: tests, // Array of all test IDs
-            status: 'Pending'
-        });
-
-        console.log(`[BILLING] Created Sample: ${newSample.sampleId} with tests: ${tests.length}`);
-
-        res.status(201).json(invoice);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
+    if (testDetails.length !== tests.length) {
+        res.status(400);
+        throw new Error('One or more tests not found');
     }
-};
+
+    const totalAmount = testDetails.reduce((acc, test) => acc + test.price, 0);
+    const finalAmount = totalAmount - (discount || 0);
+
+    // Ensure no negative balance
+    const balance = Math.max(0, finalAmount - (paidAmount || 0));
+
+    // Any extra payment is profit
+    const profit = Math.max(0, (paidAmount || 0) - finalAmount);
+
+    const status = balance <= 0 ? 'Paid' : (paidAmount > 0 ? 'Partial' : 'Unpaid');
+
+    // Handle payments array for split payment
+    let invoicePayments = [];
+    if (payments && payments.length > 0) {
+        invoicePayments = payments;
+    } else if (paymentMode && paidAmount > 0) {
+        invoicePayments = [{ mode: paymentMode, amount: paidAmount }];
+    }
+
+    const invoice = await Invoice.create({
+        invoiceIds: generateInvoiceId(),
+        patient: patientId,
+        tests,
+        totalAmount,
+        discount,
+        finalAmount,
+        paidAmount,
+        balance,
+        profit,
+        status,
+        paymentMode: payments && payments.length > 1 ? 'Mixed' : (paymentMode || 'Cash'),
+        payments: invoicePayments,
+        createdBy: req.user._id
+    });
+
+    // Create a single Sample for the entire invoice (grouping all tests)
+    const sampleTypes = [...new Set(testDetails.map(t => t.sampleType || 'Other'))];
+    const combinedSampleType = sampleTypes.join(', ');
+
+    const sampleId = 'SMP-G-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100);
+
+    const newSample = await Sample.create({
+        sampleId: sampleId,
+        patient: patientId,
+        invoice: invoice._id,
+        sampleType: combinedSampleType,
+        tests: tests, // Array of all test IDs
+        status: 'Pending'
+    });
+
+    res.status(201).json(invoice);
+});
 
 // @desc Get All Invoices (with pagination)
 // @route GET /api/billing
 // @access Private
-export const getInvoices = async (req, res) => {
-    try {
-        const { from, to, patientId, keyword, page = 1, limit = 10 } = req.query;
-        let query = {};
+export const getInvoices = asyncHandler(async (req, res) => {
+    const { from, to, patientId, keyword, page = 1, limit = 10 } = req.query;
+    let query = {};
 
-        // Support both patientId (ObjectId) and keyword (text search)
-        if (patientId) {
-            // Check if it's a valid ObjectId
-            if (mongoose.Types.ObjectId.isValid(patientId)) {
+    // Support both patientId (ObjectId) and keyword (text search)
+    if (patientId) {
+        // Check if it's a valid ObjectId
+        if (mongoose.Types.ObjectId.isValid(patientId)) {
             query.patient = patientId;
-            } else {
-                // If not valid ObjectId, treat as keyword and search by patient name/mobile
-                const patients = await Patient.find({
-                    $or: [
-                        { name: { $regex: patientId, $options: 'i' } },
-                        { mobile: { $regex: patientId, $options: 'i' } }
-                    ]
-                }).select('_id');
-                const patientIds = patients.map(p => p._id);
-                if (patientIds.length > 0) {
-                    query.patient = { $in: patientIds };
-                } else {
-                    // No matching patients, return empty result
-                    return res.json({
-                        invoices: [],
-                        page: Number(page),
-                        pages: 0,
-                        total: 0
-                    });
-                }
-            }
-        }
-
-        // Support keyword search (alternative to patientId)
-        if (keyword && !patientId) {
+        } else {
+            // If not valid ObjectId, treat as keyword and search by patient name/mobile
             const patients = await Patient.find({
                 $or: [
-                    { name: { $regex: keyword, $options: 'i' } },
-                    { mobile: { $regex: keyword, $options: 'i' } }
+                    { name: { $regex: patientId, $options: 'i' } },
+                    { mobile: { $regex: patientId, $options: 'i' } }
                 ]
             }).select('_id');
             const patientIds = patients.map(p => p._id);
             if (patientIds.length > 0) {
                 query.patient = { $in: patientIds };
             } else {
-                return res.json({
+                // No matching patients, return empty result
+                res.json({
                     invoices: [],
                     page: Number(page),
                     pages: 0,
                     total: 0
                 });
+                return;
             }
         }
-
-        if (from && to) {
-            query.createdAt = {
-                $gte: new Date(from),
-                $lte: new Date(new Date(to).setHours(23, 59, 59, 999))
-            };
-        }
-
-        const skip = (Number(page) - 1) * Number(limit);
-
-        const invoices = await Invoice.find(query)
-            .populate('patient', 'name mobile patientId')
-            .populate('tests', 'testName price')
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(Number(limit));
-
-        const total = await Invoice.countDocuments(query);
-
-        res.json({
-            invoices,
-            page: Number(page),
-            pages: Math.ceil(total / Number(limit)),
-            total
-        });
-    } catch (error) {
-        console.error('Error fetching invoices:', error);
-        res.status(500).json({ message: error.message });
     }
-};
+
+    // Support keyword search (alternative to patientId)
+    if (keyword && !patientId) {
+        const patients = await Patient.find({
+            $or: [
+                { name: { $regex: keyword, $options: 'i' } },
+                { mobile: { $regex: keyword, $options: 'i' } }
+            ]
+        }).select('_id');
+        const patientIds = patients.map(p => p._id);
+        if (patientIds.length > 0) {
+            query.patient = { $in: patientIds };
+        } else {
+            res.json({
+                invoices: [],
+                page: Number(page),
+                pages: 0,
+                total: 0
+            });
+            return;
+        }
+    }
+
+    if (from && to) {
+        query.createdAt = {
+            $gte: new Date(from),
+            $lte: new Date(new Date(to).setHours(23, 59, 59, 999))
+        };
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const invoices = await Invoice.find(query)
+        .populate('patient', 'name mobile patientId')
+        .populate('tests', 'testName price')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit));
+
+    const total = await Invoice.countDocuments(query);
+
+    res.json({
+        invoices,
+        page: Number(page),
+        pages: Math.ceil(total / Number(limit)),
+        total
+    });
+});
 
 // @desc Get Billing Stats
 // @route GET /api/billing/stats
 // @access Private
-export const getBillingStats = async (req, res) => {
-    try {
-        const { date, from, to } = req.query;
-        let matchStage = {};
+export const getBillingStats = asyncHandler(async (req, res) => {
+    const { date, from, to } = req.query;
+    let matchStage = {};
 
-        if (from && to) {
-            matchStage.createdAt = {
-                $gte: new Date(from),
-                $lte: new Date(to)
-            };
-        } else if (date) {
-            const startOfDay = new Date(date);
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date(date);
-            endOfDay.setHours(23, 59, 59, 999);
+    if (from && to) {
+        matchStage.createdAt = {
+            $gte: new Date(from),
+            $lte: new Date(to)
+        };
+    } else if (date) {
+        const startOfDay = new Date(date);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(date);
+        endOfDay.setHours(23, 59, 59, 999);
 
-            matchStage.createdAt = {
-                $gte: startOfDay,
-                $lte: endOfDay
-            };
-        }
-
-        const stats = await Invoice.aggregate([
-            { $match: matchStage },
-            {
-                $group: {
-                    _id: null,
-                    totalRevenue: { $sum: "$paidAmount" },
-                    // Dynamic Profit: Sum of (Paid - Final) only if Paid > Final
-                    totalProfit: {
-                        $sum: {
-                            $max: [0, { $subtract: ["$paidAmount", "$finalAmount"] }]
-                        }
-                    },
-                    totalLoss: { $sum: "$discount" }
-                }
-            }
-        ]);
-
-        const result = stats[0] || { totalRevenue: 0, totalProfit: 0, totalLoss: 0 };
-        // Net Earnings = Profit (Overpayment) - Loss (Discount) as per user requirement
-        const netEarnings = result.totalProfit - result.totalLoss;
-
-        res.json({
-            ...result,
-            netEarnings
-        });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
+        matchStage.createdAt = {
+            $gte: startOfDay,
+            $lte: endOfDay
+        };
     }
-};
+
+    const stats = await Invoice.aggregate([
+        { $match: matchStage },
+        {
+            $group: {
+                _id: null,
+                totalRevenue: { $sum: "$paidAmount" },
+                // Dynamic Profit: Sum of (Paid - Final) only if Paid > Final
+                totalProfit: {
+                    $sum: {
+                        $max: [0, { $subtract: ["$paidAmount", "$finalAmount"] }]
+                    }
+                },
+                totalLoss: { $sum: "$discount" }
+            }
+        }
+    ]);
+
+    const result = stats[0] || { totalRevenue: 0, totalProfit: 0, totalLoss: 0 };
+    // Net Earnings = Profit (Overpayment) - Loss (Discount) as per user requirement
+    const netEarnings = result.totalProfit - result.totalLoss;
+
+    res.json({
+        ...result,
+        netEarnings
+    });
+});
 
 // @desc Get Daily Stats for Chart (last 7 days)
 // @route GET /api/billing/daily-stats
 // @access Private
-export const getDailyStats = async (req, res) => {
-    try {
-        const { date, from, to } = req.query;
-        let matchStage = {};
+export const getDailyStats = asyncHandler(async (req, res) => {
+    const { date, from, to } = req.query;
+    let matchStage = {};
 
-        if (from && to) {
-            matchStage.createdAt = {
-                $gte: new Date(from),
-                $lte: new Date(to)
-            };
-        } else if (date) {
-            const endDate = new Date(date);
-            endDate.setHours(23, 59, 59, 999);
-            const startDate = new Date(date);
-            startDate.setDate(startDate.getDate() - 7);
-            startDate.setHours(0, 0, 0, 0);
+    if (from && to) {
+        matchStage.createdAt = {
+            $gte: new Date(from),
+            $lte: new Date(to)
+        };
+    } else if (date) {
+        const endDate = new Date(date);
+        endDate.setHours(23, 59, 59, 999);
+        const startDate = new Date(date);
+        startDate.setDate(startDate.getDate() - 7);
+        startDate.setHours(0, 0, 0, 0);
 
-            matchStage.createdAt = {
-                $gte: startDate,
-                $lte: endDate
-            };
-        } else {
-            matchStage.createdAt = {
-                $gte: new Date(new Date().setDate(new Date().getDate() - 7))
-            };
-        }
-
-        const stats = await Invoice.aggregate([
-            { $match: matchStage },
-            {
-                $group: {
-                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-                    revenue: { $sum: "$paidAmount" },
-                    profit: {
-                        $sum: {
-                            $max: [0, { $subtract: ["$paidAmount", "$finalAmount"] }]
-                        }
-                    },
-                    loss: { $sum: "$discount" }
-                }
-            },
-            { $sort: { "_id": 1 } }
-        ]);
-
-        res.json(stats);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
+        matchStage.createdAt = {
+            $gte: startDate,
+            $lte: endDate
+        };
+    } else {
+        matchStage.createdAt = {
+            $gte: new Date(new Date().setDate(new Date().getDate() - 7))
+        };
     }
-};
+
+    const stats = await Invoice.aggregate([
+        { $match: matchStage },
+        {
+            $group: {
+                _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                revenue: { $sum: "$paidAmount" },
+                profit: {
+                    $sum: {
+                        $max: [0, { $subtract: ["$paidAmount", "$finalAmount"] }]
+                    }
+                },
+                loss: { $sum: "$discount" }
+            }
+        },
+        { $sort: { "_id": 1 } }
+    ]);
+
+    res.json(stats);
+});
 
 // @desc Print Invoice HTML
 // @route GET /api/billing/print/:id
 // @access Private
-export const printInvoice = async (req, res) => {
-    try {
-        const { id } = req.params;
-        console.log('Invoice Request for Invoice:', id);
+export const printInvoice = asyncHandler(async (req, res) => {
+    const { id } = req.params;
 
-        if (!id) return res.status(400).json({ message: 'Invoice ID required' });
+    if (!id) {
+        res.status(400);
+        throw new Error('Invoice ID required');
+    }
 
-        // Support both MongoDB _id and human-readable invoiceIds
-        let invoice;
-        try {
-            if (mongoose.Types.ObjectId.isValid(id)) {
-                // Try MongoDB _id first
-                invoice = await Invoice.findById(id).populate('patient').populate('tests');
-            }
-            
-            // If not found by _id or not a valid ObjectId, try invoiceIds
-            if (!invoice) {
-                invoice = await Invoice.findOne({ invoiceIds: id }).populate('patient').populate('tests');
-            }
-        } catch (dbError) {
-            console.error('Database error while fetching invoice:', dbError);
-            throw new Error('Failed to fetch invoice from database: ' + dbError.message);
-        }
+    // Support both MongoDB _id and human-readable invoiceIds
+    let invoice;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+        // Try MongoDB _id first
+        invoice = await Invoice.findById(id).populate('patient').populate('tests');
+    }
 
-        if (!invoice) {
-            console.error('Invoice Not Found:', id);
-            return res.status(404).json({ message: 'Invoice not found in database' });
-        }
-        
-        // TC-03: Validate invoice data exists and is non-empty
-        console.log('TC-03: Invoice found:', invoice.invoiceIds || invoice._id);
-        console.log('TC-03: Invoice data validation:');
-        console.log('  - Patient:', invoice.patient ? 'Present' : 'Missing');
-        console.log('  - Tests:', invoice.tests && invoice.tests.length > 0 ? `Present (${invoice.tests.length})` : 'Missing');
-        console.log('  - Total Amount:', invoice.totalAmount);
-        console.log('  - Final Amount:', invoice.finalAmount);
-        
-        if (!invoice.patient) {
-            console.error('TC-03: Invoice missing patient data');
-            return res.status(500).json({ message: 'Invoice data incomplete: patient information missing' });
-        }
-        
-        if (!invoice.tests || invoice.tests.length === 0) {
-            console.error('TC-03: Invoice missing tests data');
-            return res.status(500).json({ message: 'Invoice data incomplete: no tests found' });
-        }
+    // If not found by _id or not a valid ObjectId, try invoiceIds
+    if (!invoice) {
+        invoice = await Invoice.findOne({ invoiceIds: id }).populate('patient').populate('tests');
+    }
 
-        // Fetch Lab Settings
-        let settings = await LabSettings.findOne();
-        if (!settings) {
-            settings = {
-                labName: 'MediLab Diagnostic Center',
-                address: '123 Health Street, Medicity',
-                mobile: '0000000000',
-                email: '',
-                gstNumber: '',
-                termsAndConditions: '1. Reports are for clinical correlation only.'
-            };
-        }
+    if (!invoice) {
+        res.status(404);
+        throw new Error('Invoice not found in database');
+    }
 
-        // Read HTML template
-        // Handle both local and Vercel serverless paths
-        const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true';
-        let templatePath;
-        
-        if (isVercel) {
-            // In Vercel, use process.cwd() relative path
-            templatePath = path.join(process.cwd(), 'src', 'templates', 'invoice.html');
+    if (!invoice.patient) {
+        res.status(500);
+        throw new Error('Invoice data incomplete: patient information missing');
+    }
+
+    if (!invoice.tests || invoice.tests.length === 0) {
+        res.status(500);
+        throw new Error('Invoice data incomplete: no tests found');
+    }
+
+    // Fetch Lab Settings
+    let settings = await LabSettings.findOne();
+    if (!settings) {
+        settings = {
+            labName: 'MediLab Diagnostic Center',
+            address: '123 Health Street, Medicity',
+            mobile: '0000000000',
+            email: '',
+            gstNumber: '',
+            termsAndConditions: '1. Reports are for clinical correlation only.'
+        };
+    }
+
+    // Read HTML template
+    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true';
+    let templatePath;
+
+    if (isVercel) {
+        templatePath = path.join(process.cwd(), 'src', 'templates', 'invoice.html');
+    } else {
+        templatePath = path.join(__dirname, '..', 'templates', 'invoice.html');
+    }
+
+    // Check if template exists
+    if (!fs.existsSync(templatePath)) {
+        const altPath = path.join(process.cwd(), 'backend', 'src', 'templates', 'invoice.html');
+        if (fs.existsSync(altPath)) {
+            templatePath = altPath;
         } else {
-            // Local development
-            templatePath = path.join(__dirname, '..', 'templates', 'invoice.html');
-        }
-
-        // Check if template exists
-        if (!fs.existsSync(templatePath)) {
-            console.error('Template file not found at:', templatePath);
-            // Try alternative path for Vercel
-            const altPath = path.join(process.cwd(), 'backend', 'src', 'templates', 'invoice.html');
-            if (fs.existsSync(altPath)) {
-                templatePath = altPath;
-            } else {
-                return res.status(500).json({ message: 'Invoice template not found' });
-            }
-        }
-        
-        let htmlTemplate = fs.readFileSync(templatePath, 'utf-8');
-        
-        if (!htmlTemplate) {
-            console.error('Template file is empty');
-            return res.status(500).json({ message: 'Invoice template is empty' });
-        }
-
-        // Prepare logo URL
-        let logoHtml = '';
-        if (settings.logo) {
-            // Check if logo is base64 (from Vercel memory storage) or file path
-            if (settings.logo.startsWith('data:image')) {
-                // Base64 image from memory storage
-                logoHtml = `<img src="${settings.logo}" alt="Lab Logo" style="max-width: 100px; max-height: 100px;">`;
-            } else {
-                // File path - construct full URL
-                const baseUrl = req.protocol + '://' + req.get('host');
-                const logoUrl = baseUrl + settings.logo;
-                logoHtml = `<img src="${logoUrl}" alt="Lab Logo" style="max-width: 100px; max-height: 100px;">`;
-            }
-        }
-
-        // Format date
-        const invoiceDate = invoice.createdAt 
-            ? new Date(invoice.createdAt).toLocaleDateString('en-IN', { 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-            })
-            : new Date().toLocaleDateString('en-IN', { 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-            });
-
-        // Status (no color needed for bill format)
-        const statusColor = '#000';
-
-        // Email HTML
-        const emailHtml = settings.email ? ` | Email: ${settings.email}` : '';
-
-        // GST HTML
-        const gstHtml = settings.gstNumber ? `<div class="lab-contact">GST: ${settings.gstNumber}</div>` : '';
-
-        // Referring Doctor HTML
-        const referringDoctorHtml = invoice.patient?.referringDoctor 
-            ? `<div class="detail-row">
-                <span class="detail-label">Ref. Doctor:</span>
-                <span class="detail-value">${invoice.patient.referringDoctor}</span>
-            </div>`
-            : '';
-
-        // Format tests for template
-        let testsRows = '';
-        if (invoice.tests && invoice.tests.length > 0) {
-            invoice.tests.forEach((test, index) => {
-                testsRows += `<tr>
-                    <td>${index + 1}</td>
-                    <td>${test.testName || 'Unknown Test'}</td>
-                    <td>₹${(test.price || 0).toFixed(2)}</td>
-                </tr>`;
-            });
-        } else {
-            testsRows = '<tr><td colspan="3" style="text-align: center; padding: 20px; color: #999;">No tests selected.</td></tr>';
-        }
-
-        // Discount row
-        const discountRow = invoice.discount > 0
-            ? `<div class="summary-row">
-                <span class="summary-label">Discount:</span>
-                <span class="summary-value">- ₹${(invoice.discount || 0).toFixed(2)}</span>
-            </div>`
-            : '';
-
-        // Balance row
-        const balanceRow = invoice.balance > 0
-            ? `<div class="summary-row">
-                <span class="summary-label">Balance:</span>
-                <span class="summary-value">₹${(invoice.balance || 0).toFixed(2)}</span>
-            </div>`
-            : '';
-
-        // Payment status HTML
-        const paymentStatusHtml = invoice.balance > 0
-            ? `<div style="font-weight: bold;">
-                <span class="label">Outstanding:</span>
-                <span>₹${(invoice.balance || 0).toFixed(2)} (Pending Payment)</span>
-            </div>`
-            : `<div style="font-weight: bold;">
-                <span class="label">Payment Status:</span>
-                <span>Fully Paid</span>
-            </div>`;
-
-        // Terms HTML
-        const termsHtml = settings.termsAndConditions
-            ? `<div class="terms-section">
-                <h4>Terms & Conditions</h4>
-                <p>${settings.termsAndConditions.replace(/\n/g, '<br>')}</p>
-            </div>`
-            : '';
-
-        // Replace template variables
-        htmlTemplate = htmlTemplate.replace(/\{\{LOGO_HTML\}\}/g, logoHtml);
-        htmlTemplate = htmlTemplate.replace(/\{\{LAB_NAME\}\}/g, settings.labName || '');
-        htmlTemplate = htmlTemplate.replace(/\{\{ADDRESS\}\}/g, settings.address || '');
-        htmlTemplate = htmlTemplate.replace(/\{\{MOBILE\}\}/g, settings.mobile || '');
-        htmlTemplate = htmlTemplate.replace(/\{\{EMAIL_HTML\}\}/g, emailHtml);
-        htmlTemplate = htmlTemplate.replace(/\{\{GST_HTML\}\}/g, gstHtml);
-        
-        htmlTemplate = htmlTemplate.replace(/\{\{INVOICE_ID\}\}/g, invoice.invoiceIds || 'N/A');
-        htmlTemplate = htmlTemplate.replace(/\{\{INVOICE_DATE\}\}/g, invoiceDate);
-        htmlTemplate = htmlTemplate.replace(/\{\{PAYMENT_MODE\}\}/g, invoice.paymentMode || 'Cash');
-        htmlTemplate = htmlTemplate.replace(/\{\{STATUS\}\}/g, invoice.status || 'Unpaid');
-        htmlTemplate = htmlTemplate.replace(/\{\{STATUS_COLOR\}\}/g, statusColor);
-        
-        htmlTemplate = htmlTemplate.replace(/\{\{PATIENT_NAME\}\}/g, invoice.patient?.name || 'N/A');
-        htmlTemplate = htmlTemplate.replace(/\{\{PATIENT_AGE\}\}/g, invoice.patient?.age || 'N/A');
-        htmlTemplate = htmlTemplate.replace(/\{\{PATIENT_GENDER\}\}/g, invoice.patient?.gender || 'N/A');
-        htmlTemplate = htmlTemplate.replace(/\{\{PATIENT_MOBILE\}\}/g, invoice.patient?.mobile || 'N/A');
-        htmlTemplate = htmlTemplate.replace(/\{\{REFERRING_DOCTOR_HTML\}\}/g, referringDoctorHtml);
-
-        htmlTemplate = htmlTemplate.replace(/\{\{TESTS_ROWS\}\}/g, testsRows);
-
-        htmlTemplate = htmlTemplate.replace(/\{\{TOTAL_AMOUNT\}\}/g, (invoice.totalAmount || 0).toFixed(2));
-        htmlTemplate = htmlTemplate.replace(/\{\{DISCOUNT_ROW\}\}/g, discountRow);
-        htmlTemplate = htmlTemplate.replace(/\{\{FINAL_AMOUNT\}\}/g, (invoice.finalAmount || 0).toFixed(2));
-        htmlTemplate = htmlTemplate.replace(/\{\{PAID_AMOUNT\}\}/g, (invoice.paidAmount || 0).toFixed(2));
-        htmlTemplate = htmlTemplate.replace(/\{\{BALANCE_ROW\}\}/g, balanceRow);
-        htmlTemplate = htmlTemplate.replace(/\{\{PAYMENT_STATUS_HTML\}\}/g, paymentStatusHtml);
-        htmlTemplate = htmlTemplate.replace(/\{\{TERMS_HTML\}\}/g, termsHtml);
-
-        // Set headers - ensure HTML content type
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Content-Disposition', `inline; filename=invoice-${invoice.invoiceIds || 'download'}.html`);
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-        res.setHeader('Pragma', 'no-cache');
-        res.setHeader('Expires', '0');
-
-        // TC-01, TC-07: Validate HTML template has content
-        if (!htmlTemplate || htmlTemplate.length < 500) {
-            console.error('TC-01: HTML template is empty or too short');
-            return res.status(500).json({ message: 'Invoice template generation failed: empty template' });
-        }
-        
-        // Check if template has actual invoice data (not just placeholders)
-        const hasInvoiceId = htmlTemplate.includes(invoice.invoiceIds || '');
-        const hasPatientName = invoice.patient?.name && htmlTemplate.includes(invoice.patient.name);
-        const hasTests = htmlTemplate.includes('TESTS_ROWS') === false; // Should be replaced, not present
-        
-        console.log('TC-01: HTML template validation:');
-        console.log('  - Template length:', htmlTemplate.length);
-        console.log('  - Has Invoice ID:', hasInvoiceId);
-        console.log('  - Has Patient Name:', hasPatientName);
-        console.log('  - Tests replaced:', hasTests);
-        
-        if (!hasInvoiceId || !hasPatientName) {
-            console.error('TC-01: HTML template missing critical data');
-            return res.status(500).json({ message: 'Invoice template generation failed: data not properly inserted' });
-        }
-        
-        // Send HTML response
-        console.log('TC-04: Sending HTML invoice response (async operation complete)');
-        res.status(200).send(htmlTemplate);
-
-    } catch (error) {
-        console.error('CRITICAL INVOICE ERROR:', error);
-        console.error('Error Stack:', error.stack);
-        console.error('Invoice ID requested:', req.params.id);
-        if (!res.headersSent) {
-            res.status(500).json({ 
-                message: 'Internal Server Error while generating invoice: ' + error.message,
-                error: process.env.NODE_ENV === 'development' ? error.stack : undefined
-            });
+            res.status(500);
+            throw new Error('Invoice template not found');
         }
     }
-};
+
+    let htmlTemplate = fs.readFileSync(templatePath, 'utf-8');
+
+    if (!htmlTemplate) {
+        res.status(500);
+        throw new Error('Invoice template is empty');
+    }
+
+    // Prepare logo URL
+    let logoHtml = '';
+    if (settings.logo) {
+        if (settings.logo.startsWith('data:image')) {
+            logoHtml = `<img src="${settings.logo}" alt="Lab Logo" style="max-width: 100px; max-height: 100px;">`;
+        } else {
+            const baseUrl = req.protocol + '://' + req.get('host');
+            const logoUrl = baseUrl + settings.logo;
+            logoHtml = `<img src="${logoUrl}" alt="Lab Logo" style="max-width: 100px; max-height: 100px;">`;
+        }
+    }
+
+    // Format date
+    const invoiceDate = invoice.createdAt
+        ? new Date(invoice.createdAt).toLocaleDateString('en-IN', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        })
+        : new Date().toLocaleDateString('en-IN', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
+    const statusColor = '#000';
+    const emailHtml = settings.email ? ` | Email: ${settings.email}` : '';
+    const gstHtml = settings.gstNumber ? `<div class="lab-contact">GST: ${settings.gstNumber}</div>` : '';
+
+    const referringDoctorHtml = invoice.patient?.referringDoctor
+        ? `<div class="detail-row">
+            <span class="detail-label">Ref. Doctor:</span>
+            <span class="detail-value">${invoice.patient.referringDoctor}</span>
+        </div>`
+        : '';
+
+    // Format tests for template
+    let testsRows = '';
+    if (invoice.tests && invoice.tests.length > 0) {
+        invoice.tests.forEach((test, index) => {
+            testsRows += `<tr>
+                <td>${index + 1}</td>
+                <td>${test.testName || 'Unknown Test'}</td>
+                <td>₹${(test.price || 0).toFixed(2)}</td>
+            </tr>`;
+        });
+    } else {
+        testsRows = '<tr><td colspan="3" style="text-align: center; padding: 20px; color: #999;">No tests selected.</td></tr>';
+    }
+
+    const discountRow = invoice.discount > 0
+        ? `<div class="summary-row">
+            <span class="summary-label">Discount:</span>
+            <span class="summary-value">- ₹${(invoice.discount || 0).toFixed(2)}</span>
+        </div>`
+        : '';
+
+    const balanceRow = invoice.balance > 0
+        ? `<div class="summary-row">
+            <span class="summary-label">Balance:</span>
+            <span class="summary-value">₹${(invoice.balance || 0).toFixed(2)}</span>
+        </div>`
+        : '';
+
+    const paymentStatusHtml = invoice.balance > 0
+        ? `<div style="font-weight: bold;">
+            <span class="label">Outstanding:</span>
+            <span>₹${(invoice.balance || 0).toFixed(2)} (Pending Payment)</span>
+        </div>`
+        : `<div style="font-weight: bold;">
+            <span class="label">Payment Status:</span>
+            <span>Fully Paid</span>
+        </div>`;
+
+    const termsHtml = settings.termsAndConditions
+        ? `<div class="terms-section">
+            <h4>Terms & Conditions</h4>
+            <p>${settings.termsAndConditions.replace(/\n/g, '<br>')}</p>
+        </div>`
+        : '';
+
+    // Replace template variables
+    htmlTemplate = htmlTemplate.replace(/\{\{LOGO_HTML\}\}/g, logoHtml);
+    htmlTemplate = htmlTemplate.replace(/\{\{LAB_NAME\}\}/g, settings.labName || '');
+    htmlTemplate = htmlTemplate.replace(/\{\{ADDRESS\}\}/g, settings.address || '');
+    htmlTemplate = htmlTemplate.replace(/\{\{MOBILE\}\}/g, settings.mobile || '');
+    htmlTemplate = htmlTemplate.replace(/\{\{EMAIL_HTML\}\}/g, emailHtml);
+    htmlTemplate = htmlTemplate.replace(/\{\{GST_HTML\}\}/g, gstHtml);
+
+    htmlTemplate = htmlTemplate.replace(/\{\{INVOICE_ID\}\}/g, invoice.invoiceIds || 'N/A');
+    htmlTemplate = htmlTemplate.replace(/\{\{INVOICE_DATE\}\}/g, invoiceDate);
+    htmlTemplate = htmlTemplate.replace(/\{\{PAYMENT_MODE\}\}/g, invoice.paymentMode || 'Cash');
+    htmlTemplate = htmlTemplate.replace(/\{\{STATUS\}\}/g, invoice.status || 'Unpaid');
+    htmlTemplate = htmlTemplate.replace(/\{\{STATUS_COLOR\}\}/g, statusColor);
+
+    htmlTemplate = htmlTemplate.replace(/\{\{PATIENT_NAME\}\}/g, invoice.patient?.name || 'N/A');
+    htmlTemplate = htmlTemplate.replace(/\{\{PATIENT_AGE\}\}/g, invoice.patient?.age || 'N/A');
+    htmlTemplate = htmlTemplate.replace(/\{\{PATIENT_GENDER\}\}/g, invoice.patient?.gender || 'N/A');
+    htmlTemplate = htmlTemplate.replace(/\{\{PATIENT_MOBILE\}\}/g, invoice.patient?.mobile || 'N/A');
+    htmlTemplate = htmlTemplate.replace(/\{\{REFERRING_DOCTOR_HTML\}\}/g, referringDoctorHtml);
+
+    htmlTemplate = htmlTemplate.replace(/\{\{TESTS_ROWS\}\}/g, testsRows);
+
+    htmlTemplate = htmlTemplate.replace(/\{\{TOTAL_AMOUNT\}\}/g, (invoice.totalAmount || 0).toFixed(2));
+    htmlTemplate = htmlTemplate.replace(/\{\{DISCOUNT_ROW\}\}/g, discountRow);
+    htmlTemplate = htmlTemplate.replace(/\{\{FINAL_AMOUNT\}\}/g, (invoice.finalAmount || 0).toFixed(2));
+    htmlTemplate = htmlTemplate.replace(/\{\{PAID_AMOUNT\}\}/g, (invoice.paidAmount || 0).toFixed(2));
+    htmlTemplate = htmlTemplate.replace(/\{\{BALANCE_ROW\}\}/g, balanceRow);
+    htmlTemplate = htmlTemplate.replace(/\{\{PAYMENT_STATUS_HTML\}\}/g, paymentStatusHtml);
+    htmlTemplate = htmlTemplate.replace(/\{\{TERMS_HTML\}\}/g, termsHtml);
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `inline; filename=invoice-${invoice.invoiceIds || 'download'}.html`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    res.status(200).send(htmlTemplate);
+});
 
 // @desc Delete Invoice
 // @route DELETE /api/billing/:id
 // @access Private
-export const deleteInvoice = async (req, res) => {
-    try {
-        const { id } = req.params;
+export const deleteInvoice = asyncHandler(async (req, res) => {
+    const { id } = req.params;
 
-        const invoice = await Invoice.findById(id);
-        if (!invoice) {
-            return res.status(404).json({ message: 'Invoice not found' });
-        }
-
-        // Delete associated sample if exists
-        const sample = await Sample.findOne({ invoice: id });
-        if (sample) {
-            // Import TestResult dynamically to avoid circular dependency
-            const TestResult = (await import('../models/TestResult.js')).default;
-            if (TestResult) {
-                await TestResult.deleteMany({ sample: sample._id });
-            }
-            // Delete the sample
-            await sample.deleteOne();
-        }
-
-        // Delete the invoice
-        await invoice.deleteOne();
-
-        res.json({ message: 'Invoice deleted successfully' });
-    } catch (error) {
-        console.error('Error deleting invoice:', error);
-        res.status(500).json({ message: error.message });
+    const invoice = await Invoice.findById(id);
+    if (!invoice) {
+        res.status(404);
+        throw new Error('Invoice not found');
     }
-};
+
+    // Delete associated sample if exists
+    const sample = await Sample.findOne({ invoice: id });
+    if (sample) {
+        // Import TestResult dynamically to avoid circular dependency
+        const TestResult = (await import('../models/TestResult.js')).default;
+        if (TestResult) {
+            await TestResult.deleteMany({ sample: sample._id });
+        }
+        // Delete the sample
+        await sample.deleteOne();
+    }
+
+    // Delete the invoice
+    await invoice.deleteOne();
+
+    res.json({ message: 'Invoice deleted successfully' });
+});

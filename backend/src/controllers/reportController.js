@@ -111,6 +111,12 @@ export const approveResults = async (req, res) => {
     }
 };
 
+import { fileURLToPath } from 'url';
+
+// Define __dirname for ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // @desc Generate HTML Report
 // @route GET /api/reports/print/:sampleId
 // @access Private
@@ -145,25 +151,28 @@ export const printReport = async (req, res) => {
         }
 
         // Read HTML template
-        // Handle both local and Vercel serverless paths
-        const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true';
+        // Robust Path Handling for Local vs Production (Vercel)
+        // Read HTML template
+        // Robust Path Handling for Local vs Production (Vercel)
         let templatePath;
-        
+        const isVercel = process.env.VERCEL === '1';
+
         if (isVercel) {
-            // In Vercel, use process.cwd() relative path
-            templatePath = path.join(process.cwd(), 'src', 'templates', 'report.html');
+            templatePath = path.join(process.cwd(), 'src', 'templates', 'MainReport.html');
+            if (!fs.existsSync(templatePath)) {
+                templatePath = path.join(process.cwd(), 'backend', 'src', 'templates', 'MainReport.html');
+            }
         } else {
-            // Local development
-            templatePath = path.join(__dirname, '..', 'templates', 'report.html');
+            templatePath = path.join(__dirname, '..', 'templates', 'MainReport.html');
         }
 
         if (!fs.existsSync(templatePath)) {
-            // Try alternative path for Vercel
-            const altPath = path.join(process.cwd(), 'backend', 'src', 'templates', 'report.html');
-            if (fs.existsSync(altPath)) {
-                templatePath = altPath;
+            console.error(`Report template not found at: ${templatePath}`);
+            const fallbackPath = path.resolve('src/templates/MainReport.html');
+            if (fs.existsSync(fallbackPath)) {
+                templatePath = fallbackPath;
             } else {
-                return res.status(500).json({ message: 'Report template not found' });
+                return res.status(500).json({ message: 'Report template not found on server' });
             }
         }
 
@@ -172,23 +181,20 @@ export const printReport = async (req, res) => {
         // Prepare logo HTML
         let logoHtml = '';
         if (settings.logo) {
-            // Check if logo is base64 (from Vercel memory storage) or file path
             if (settings.logo.startsWith('data:image')) {
-                // Base64 image from memory storage
-                logoHtml = `<img src="${settings.logo}" style="width:90px;" />`;
+                logoHtml = `<img src="${settings.logo}" alt="Lab Logo">`;
             } else {
-                // File path - construct full URL
                 const baseUrl = req.protocol + '://' + req.get('host');
                 const logoUrl = baseUrl + settings.logo;
-                logoHtml = `<img src="${logoUrl}" style="width:90px;" />`;
+                logoHtml = `<img src="${logoUrl}" alt="Lab Logo">`;
             }
         }
 
         // Format dates
-        const collectedOn = sample.collectionDate 
-            ? new Date(sample.collectionDate).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-            : new Date(sample.createdAt).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const reportedOn = new Date().toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const collectedOn = sample.collectionDate
+            ? new Date(sample.collectionDate).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : new Date(sample.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const reportedOn = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
         // Group results by department
         const departments = {};
@@ -198,7 +204,7 @@ export const printReport = async (req, res) => {
             departments[deptName].push(r);
         });
 
-        // Generate report for first department (or combine if needed)
+        // Generate report for first department
         const firstDept = Object.keys(departments)[0];
         const deptResults = departments[firstDept];
         const mainTest = deptResults[0].test;
@@ -207,67 +213,67 @@ export const printReport = async (req, res) => {
         let testResultsRows = '';
         deptResults.forEach(r => {
             const hasSubtests = r.subtests && r.subtests.length > 0;
-            
-            if (r.resultValue || !hasSubtests) {
-                const resultValue = r.resultValue || '';
-                const abnormalClass = r.abnormal ? 'color:red; font-weight:bold;' : '';
-                const abnormalText = r.abnormal ? ` (Abnormal)` : '';
-                const arrow = r.abnormal ? ' ▲' : '';
-                
-                const unit = r.test.unit || '-';
-                const range = r.test.normalRanges?.general || 
-                    (r.test.normalRanges?.male ? `${r.test.normalRanges.male.min} – ${r.test.normalRanges.male.max}` : '-');
 
+            // Logic for High/Low/Borderline classes
+            // For now, we stick to simple "abnormal" logic mapping to "high" class for red color
+            const statusClass = r.abnormal ? 'high' : '';
+            const statusText = r.abnormal ? ' (Abnormal)' : '';
+
+            const range = r.test.normalRanges?.general ||
+                (r.test.normalRanges?.male ? `${r.test.normalRanges.male.min} – ${r.test.normalRanges.male.max}` : '-');
+
+            if (r.resultValue || !hasSubtests) {
                 testResultsRows += `
                     <tr>
-                        <td style="padding:8px;"><b>${r.test.testName}</b></td>
-                        <td style="padding:8px; ${abnormalClass}">${resultValue}${abnormalText}${arrow}</td>
-                        <td style="padding:8px;">${unit}</td>
-                        <td style="padding:8px;">${range}</td>
+                        <td>${r.test.testName}</td>
+                        <td class="${statusClass}">${r.resultValue || ''}${statusText}</td>
+                        <td>${r.test.unit || '-'}</td>
                     </tr>
                 `;
             }
 
             // Add subtests
             if (hasSubtests && r.subtests) {
+                // Add a section header for the main test to match MainReport structure
+                testResultsRows += `<tr class="section"><td colspan="3">${r.test.testName.toUpperCase()}</td></tr>`;
+
                 r.subtests.forEach(sub => {
-                    const abnormalClass = sub.abnormal ? 'color:red; font-weight:bold;' : '';
-                    const abnormalText = sub.abnormal ? ` (Abnormal)` : '';
-                    const arrow = sub.abnormal ? ' ▲' : '';
-                    
+                    const subStatusClass = sub.abnormal ? 'high' : '';
+                    const subStatusText = sub.abnormal ? ' (Abnormal)' : '';
                     testResultsRows += `
                         <tr>
-                            <td style="padding:8px;">${sub.testName}</td>
-                            <td style="padding:8px; ${abnormalClass}">${sub.resultValue}${abnormalText}${arrow}</td>
-                            <td style="padding:8px;">${sub.unit || '-'}</td>
-                            <td style="padding:8px;">${sub.normalRange || '-'}</td>
+                            <td>${sub.testName}</td>
+                            <td class="${subStatusClass}">${sub.resultValue}${subStatusText}</td>
+                            <td>${sub.unit || '-'}</td>
                         </tr>
                     `;
                 });
             }
         });
 
-        // Get interpretation from remarks
+        // Get interpretation
         const interpretation = deptResults.find(r => r.remarks)?.remarks || 'Values marked abnormal are outside the reference range.';
 
-        // Replace placeholders
-        htmlTemplate = htmlTemplate.replace('{{LOGO_HTML}}', logoHtml);
-        htmlTemplate = htmlTemplate.replace('{{LAB_NAME}}', settings.labName || 'labs ph center');
-        htmlTemplate = htmlTemplate.replace('{{LAB_MOBILE}}', settings.mobile || '7879999979');
-        htmlTemplate = htmlTemplate.replace('{{LAB_EMAIL}}', settings.email || 'busaramahesh12@gmail.com');
-        htmlTemplate = htmlTemplate.replace('{{PATIENT_NAME}}', sample.patient.name || 'N/A');
-        htmlTemplate = htmlTemplate.replace('{{PATIENT_AGE}}', sample.patient.age || 'N/A');
-        htmlTemplate = htmlTemplate.replace('{{PATIENT_GENDER}}', sample.patient.gender || 'N/A');
-        htmlTemplate = htmlTemplate.replace('{{REFERRING_DOCTOR}}', sample.patient.referringDoctor || 'Dr. Self');
-        htmlTemplate = htmlTemplate.replace('{{SAMPLE_TYPE}}', sample.sampleType || 'EDTA Blood');
-        htmlTemplate = htmlTemplate.replace('{{SAMPLE_ID}}', sample.sampleId || 'N/A');
-        htmlTemplate = htmlTemplate.replace('{{REG_NO}}', sample.patient.patientId || 'N/A');
-        htmlTemplate = htmlTemplate.replace('{{COLLECTED_ON}}', collectedOn);
-        htmlTemplate = htmlTemplate.replace('{{REPORTED_ON}}', reportedOn);
-        htmlTemplate = htmlTemplate.replace('{{DEPARTMENT_NAME}}', firstDept || 'GENERAL');
-        htmlTemplate = htmlTemplate.replace('{{TEST_NAME}}', mainTest.testName?.toUpperCase() || 'TEST REPORT');
-        htmlTemplate = htmlTemplate.replace('{{TEST_RESULTS_ROWS}}', testResultsRows);
-        htmlTemplate = htmlTemplate.replace('{{INTERPRETATION}}', interpretation);
+        // Replace placeholders (Global replace for all occurrences)
+        htmlTemplate = htmlTemplate.replace(/{{LOGO_HTML}}/g, logoHtml);
+        htmlTemplate = htmlTemplate.replace(/{{LAB_NAME}}/g, settings.labName || 'LABORATORY CENTER');
+        htmlTemplate = htmlTemplate.replace(/{{LAB_TAGLINE}}/g, 'Accurate | Caring | Instant');
+        htmlTemplate = htmlTemplate.replace(/{{LAB_ADDRESS}}/g, settings.address || '');
+        htmlTemplate = htmlTemplate.replace(/{{LAB_PHONE}}/g, settings.mobile || '');
+        htmlTemplate = htmlTemplate.replace(/{{LAB_EMAIL}}/g, settings.email || '');
+
+        htmlTemplate = htmlTemplate.replace(/{{PATIENT_NAME}}/g, sample.patient.name || 'N/A');
+        htmlTemplate = htmlTemplate.replace(/{{PATIENT_AGE}}/g, String(sample.patient.age) || 'N/A');
+        htmlTemplate = htmlTemplate.replace(/{{PATIENT_GENDER}}/g, sample.patient.gender || 'N/A');
+        htmlTemplate = htmlTemplate.replace(/{{PATIENT_ID}}/g, sample.patient.patientId || 'N/A');
+        htmlTemplate = htmlTemplate.replace(/{{SAMPLE_LOCATION}}/g, 'Lab Centre');
+
+        htmlTemplate = htmlTemplate.replace(/{{REFERRING_DOCTOR}}/g, sample.patient.referringDoctor || 'Self');
+        htmlTemplate = htmlTemplate.replace(/{{REPORT_DATE}}/g, reportedOn);
+
+        htmlTemplate = htmlTemplate.replace(/{{TEST_TITLE}}/g, mainTest.testName?.toUpperCase() || 'LAB REPORT');
+        htmlTemplate = htmlTemplate.replace(/{{TEST_RESULTS_ROWS}}/g, testResultsRows);
+        htmlTemplate = htmlTemplate.replace(/{{INTERPRETATION}}/g, interpretation);
 
         // Set headers
         res.setHeader('Content-Type', 'text/html; charset=utf-8');

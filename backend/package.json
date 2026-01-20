@@ -8,7 +8,8 @@
     "dev": "nodemon src/app.js",
     "seed": "node seed.js",
     "lint": "eslint .",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "vercel-build": "echo 'Build complete'"
   },
   "keywords": [],
@@ -20,14 +21,26 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "express-async-handler": "^1.2.0",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^8.2.1",
+    "express-validator": "^7.0.1",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
+    "mongo-sanitize": "^1.1.0",
     "mongoose": "^9.0.2",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.12",
-    "pdfkit": "^0.17.2"
+    "pdfkit": "^0.17.2",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.0",
+    "winston": "^3.11.0",
+    "xss-clean": "^0.1.4"
   },
   "devDependencies": {
     "eslint": "^9.39.1",
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.11",
+    "supertest": "^7.2.2",
+    "vitest": "^4.0.17"
   }
 }

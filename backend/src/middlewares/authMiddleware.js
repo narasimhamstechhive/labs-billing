@@ -31,8 +31,11 @@ export const protect = async (req, res, next) => {
 
 export const authorize = (...roles) => {
     return (req, res, next) => {
-        // Since there is ONLY ONE USER (Lab Owner / Admin),
-        // we bypass role validation and allow all authenticated users.
+        if (!req.user || !roles.includes(req.user.role)) {
+            return res.status(403).json({
+                message: `User role ${req.user ? req.user.role : 'none'} is not authorized to access this route`
+            });
+        }
         next();
     };
 };

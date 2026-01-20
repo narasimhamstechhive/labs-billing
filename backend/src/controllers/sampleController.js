@@ -61,8 +61,6 @@ export const getSamples = async (req, res) => {
             approved: statsMap['Approved'] || 0
         };
 
-        console.log('[SAMPLE STATS]', stats);
-
         res.json({
             samples,
             page: Number(page),

@@ -123,11 +123,6 @@ export const getAnalytics = async (req, res) => {
             .populate('tests', 'testName')
             .sort({ collectionDate: -1 });
 
-        console.log('[ANALYTICS] Range:', range);
-        console.log('[ANALYTICS] Date Range:', { startDate, endDate });
-        console.log('[ANALYTICS] Invoices Count:', invoices.length);
-        console.log('[ANALYTICS] Collections Count:', collections.length);
-
         res.json({
             todayRevenue: todayRevenue[0]?.total || 0,
             totalRevenue: totalRevenue[0]?.total || 0,
