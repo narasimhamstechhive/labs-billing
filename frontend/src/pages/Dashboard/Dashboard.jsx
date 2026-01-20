@@ -35,6 +35,8 @@ import {
 } from 'recharts';
 import { samplesAPI, patientsAPI, billingAPI } from '../../services/api';
 
+import { DashboardSkeleton } from '../../components/Common/Skeleton';
+
 const Dashboard = () => {
     const navigate = useNavigate();
     const [stats, setStats] = useState({
@@ -216,14 +218,7 @@ const Dashboard = () => {
     };
 
     if (loading) {
-        return (
-            <div className="flex items-center justify-center h-96">
-                <div className="flex flex-col items-center gap-3">
-                    <div className="w-10 h-10 border-4 border-primary-100 border-t-primary-600 rounded-full animate-spin"></div>
-                    <p className="text-sm font-medium text-gray-400">Loading Dashboard...</p>
-                </div>
-            </div>
-        );
+        return <DashboardSkeleton />;
     }
 
     return (

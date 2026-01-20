@@ -4,6 +4,7 @@ import { Search, User, Printer, ChevronLeft, ChevronRight, Trash2 } from 'lucide
 import toast from 'react-hot-toast';
 import PatientForm from '../../components/PatientForm';
 import DeleteConfirmModal from '../../components/DeleteConfirmModal';
+import { TableSkeleton } from '../../components/Common/Skeleton';
 
 const PatientRegistration = () => {
     const [patients, setPatients] = useState([]);
@@ -348,40 +349,48 @@ const PatientRegistration = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {patients.map(patient => (
-                                            <tr key={patient._id} className="border-b last:border-0 hover:bg-gray-50 transition-colors">
-                                                <td>
-                                                    <span className="font-mono text-sm font-semibold text-teal-600">
-                                                        {patient.patientId}
-                                                    </span>
-                                                </td>
-                                                <td className="font-medium text-gray-900">{patient.name}</td>
-                                                <td className="text-gray-600">
-                                                    {patient.age} / {patient.gender.charAt(0)}
-                                                </td>
-                                                <td className="text-gray-600">{patient.mobile}</td>
-                                                <td className="text-gray-600">{patient.referringDoctor || '-'}</td>
-                                                <td>
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={() => handlePrint(patient)}
-                                                            className="p-2 text-gray-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors border border-transparent hover:border-teal-200"
-                                                            title="Print Patient Invoice"
-                                                        >
-                                                            <Printer className="w-4 h-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDelete(patient._id)}
-                                                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200"
-                                                            title="Delete Patient"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
+                                        {loading ? (
+                                            <tr>
+                                                <td colSpan="6" className="p-0">
+                                                    <TableSkeleton rows={limit} cols={6} />
                                                 </td>
                                             </tr>
-                                        ))}
-                                        {patients.length === 0 && !loading && (
+                                        ) : (
+                                            patients.map(patient => (
+                                                <tr key={patient._id} className="border-b last:border-0 hover:bg-gray-50 transition-colors">
+                                                    <td>
+                                                        <span className="font-mono text-sm font-semibold text-teal-600">
+                                                            {patient.patientId}
+                                                        </span>
+                                                    </td>
+                                                    <td className="font-medium text-gray-900">{patient.name}</td>
+                                                    <td className="text-gray-600">
+                                                        {patient.age} / {patient.gender.charAt(0)}
+                                                    </td>
+                                                    <td className="text-gray-600">{patient.mobile}</td>
+                                                    <td className="text-gray-600">{patient.referringDoctor || '-'}</td>
+                                                    <td>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => handlePrint(patient)}
+                                                                className="p-2 text-gray-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors border border-transparent hover:border-teal-200"
+                                                                title="Print Patient Invoice"
+                                                            >
+                                                                <Printer className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDelete(patient._id)}
+                                                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200"
+                                                                title="Delete Patient"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                        {!loading && patients.length === 0 && (
                                             <tr>
                                                 <td colSpan="6" className="text-center py-16">
                                                     <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center mx-auto mb-4">

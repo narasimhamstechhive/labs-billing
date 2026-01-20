@@ -1,5 +1,6 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { cacheService } from './cacheService';
 
 // Create axios instance with base configuration
 const api = axios.create({
@@ -91,20 +92,60 @@ export const authAPI = {
 // DEPARTMENTS API
 // ============================================
 export const departmentsAPI = {
-    getAll: () => api.get('/departments'),
-    create: (data) => api.post('/departments', data),
-    update: (id, data) => api.put(`/departments/${id}`, data),
-    delete: (id) => api.delete(`/departments/${id}`),
+    getAll: async () => {
+        const cached = cacheService.get('departments');
+        if (cached) return { data: cached };
+
+        const res = await api.get('/departments');
+        cacheService.set('departments', res.data);
+        return res;
+    },
+    create: async (data) => {
+        const res = await api.post('/departments', data);
+        cacheService.invalidate('departments');
+        return res;
+    },
+    update: async (id, data) => {
+        const res = await api.put(`/departments/${id}`, data);
+        cacheService.invalidate('departments');
+        return res;
+    },
+    delete: async (id) => {
+        const res = await api.delete(`/departments/${id}`);
+        cacheService.invalidate('departments');
+        return res;
+    },
 };
 
 // ============================================
 // TESTS API
 // ============================================
 export const testsAPI = {
-    getAll: (params) => api.get('/tests', { params }),
-    create: (data) => api.post('/tests', data),
-    update: (id, data) => api.put(`/tests/${id}`, data),
-    delete: (id) => api.delete(`/tests/${id}`),
+    getAll: async (params) => {
+        // Only cache if no search/filter params are present
+        const cacheKey = params ? `tests_${JSON.stringify(params)}` : 'tests_all';
+        const cached = cacheService.get(cacheKey);
+        if (cached) return { data: cached };
+
+        const res = await api.get('/tests', { params });
+        cacheService.set(cacheKey, res.data);
+        return res;
+    },
+    create: async (data) => {
+        const res = await api.post('/tests', data);
+        cacheService.clear(); // Clear all tests cache on create
+        return res;
+    },
+    update: async (id, data) => {
+        const res = await api.put(`/tests/${id}`, data);
+        cacheService.clear(); // Clear all tests cache on update
+        return res;
+    },
+    delete: async (id) => {
+        const res = await api.delete(`/tests/${id}`);
+        cacheService.clear(); // Clear all tests cache on delete
+        return res;
+    },
 };
 
 // ============================================

@@ -138,7 +138,7 @@ const Settings = () => {
             <div className={`border-b-2 border-primary-600 flex justify-between items-start gap-4 ${fullSize ? 'pb-6 mb-8 h-40' : 'pb-2 mb-2 h-20'}`}>
                 {formData.logo ? (
                     <img
-                        src={`http://127.0.0.1:5000${formData.logo}`}
+                        src={formData.logo.startsWith('http') ? formData.logo : `${import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000'}${formData.logo}`}
                         className={`${fullSize ? 'h-32 w-32' : 'h-12 w-12'} object-contain`}
                         alt="Lab Logo"
                     />
@@ -271,7 +271,7 @@ const Settings = () => {
                             {formData.logo ? (
                                 <div className="relative w-full h-full p-4 flex items-center justify-center bg-white">
                                     <img
-                                        src={`http://127.0.0.1:5000${formData.logo}`}
+                                        src={formData.logo.startsWith('http') ? formData.logo : `${import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000'}${formData.logo}`}
                                         alt="Logo"
                                         className="max-w-full max-h-full object-contain"
                                     />

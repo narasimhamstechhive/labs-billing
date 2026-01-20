@@ -3,12 +3,14 @@ import { testsAPI, departmentsAPI } from '../../services/api';
 import toast from 'react-hot-toast';
 import { Trash2, Edit, AlertTriangle } from 'lucide-react';
 import DeleteConfirmModal from '../../components/DeleteConfirmModal';
+import { TableSkeleton } from '../../components/Common/Skeleton';
 
 const TestMaster = () => {
     const [tests, setTests] = useState([]);
     const [page, setPage] = useState(1);
     const [pages, setPages] = useState(1);
     const [limit] = useState(50);
+    const [loading, setLoading] = useState(true);
     const [departments, setDepartments] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [editingTest, setEditingTest] = useState(null);
@@ -42,10 +44,13 @@ const TestMaster = () => {
             setDepartments(deptsRes.data);
         } catch (err) {
             console.error(err);
+        } finally {
+            setLoading(false);
         }
     };
 
     useEffect(() => {
+        setLoading(true);
         fetchData();
     }, [page]);
 
@@ -190,37 +195,45 @@ const TestMaster = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {tests.map((test) => (
-                                    <tr key={test._id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 font-medium text-gray-900">{test.testName}</td>
-                                        <td className="px-6 py-4 text-gray-600">
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                                                {test.department?.name || '-'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-gray-600">{test.sampleType}</td>
-                                        <td className="px-6 py-4 font-mono font-medium text-gray-900">₹{test.price}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={() => handleEdit(test)}
-                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="Edit"
-                                                >
-                                                    <Edit size={18} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(test._id)}
-                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            </div>
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan="5" className="p-0">
+                                            <TableSkeleton rows={10} cols={5} />
                                         </td>
                                     </tr>
-                                ))}
-                                {tests.length === 0 && (
+                                ) : (
+                                    tests.map((test) => (
+                                        <tr key={test._id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-4 font-medium text-gray-900">{test.testName}</td>
+                                            <td className="px-6 py-4 text-gray-600">
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                                                    {test.department?.name || '-'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-gray-600">{test.sampleType}</td>
+                                            <td className="px-6 py-4 font-mono font-medium text-gray-900">₹{test.price}</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleEdit(test)}
+                                                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                        title="Edit"
+                                                    >
+                                                        <Edit size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(test._id)}
+                                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title="Delete"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                                {!loading && tests.length === 0 && (
                                     <tr>
                                         <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
                                             No tests found. Add a new test to get started.

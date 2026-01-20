@@ -3,6 +3,7 @@ import { departmentsAPI } from '../../services/api';
 import toast from 'react-hot-toast';
 import { Trash2, Plus, Building2, FileText, Search, X, Edit3, Save, RotateCcw, AlertTriangle } from 'lucide-react';
 import DeleteConfirmModal from '../../components/DeleteConfirmModal';
+import { TableSkeleton } from '../../components/Common/Skeleton';
 
 const DepartmentMaster = () => {
     const [departments, setDepartments] = useState([]);
@@ -190,9 +191,8 @@ const DepartmentMaster = () => {
 
                             <div className="max-h-[600px] overflow-y-auto">
                                 {loading ? (
-                                    <div className="p-16 text-center">
-                                        <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-                                        <p className="text-gray-500 font-medium">Loading departments...</p>
+                                    <div className="p-8">
+                                        <TableSkeleton rows={5} cols={2} />
                                     </div>
                                 ) : filteredDepartments.length === 0 ? (
                                     <div className="p-16 text-center">
