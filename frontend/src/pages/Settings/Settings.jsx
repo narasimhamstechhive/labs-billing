@@ -86,10 +86,7 @@ const Settings = () => {
         if (!file) return;
 
         // basic client-side check
-        if (!file.type.startsWith('image/')) {
-            setMessage({ type: 'error', text: 'Please upload an image file (JPG/PNG)' });
-            return;
-        }
+
 
         const uploadFormData = new FormData();
         uploadFormData.append('logo', file);

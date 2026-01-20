@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Trash2, Receipt, IndianRupee, CreditCard, Smartphone, Wallet, Download, UserPlus, X } from 'lucide-react';
+import { Search, Plus, Trash2, Receipt, IndianRupee, CreditCard, Smartphone, Wallet, Download, UserPlus, X, Calculator as CalculatorIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getPatients, getTests, createInvoice, registerPatient, default as api } from '../../services/api';
+import Calculator from '../../components/Tools/Calculator';
 
 const Billing = () => {
     const [patients, setPatients] = useState([]);
@@ -12,10 +13,13 @@ const Billing = () => {
     const [discountAmount, setDiscountAmount] = useState("");
     const [paidAmount, setPaidAmount] = useState("");
     const [paymentMode, setPaymentMode] = useState('Cash');
+    const [splitPayments, setSplitPayments] = useState([{ mode: 'Cash', amount: "" }]);
+    const [isSplitPayment, setIsSplitPayment] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
     const [lastGeneratedInvoice, setLastGeneratedInvoice] = useState(null);
     const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
     const [isAddPatientModalOpen, setIsAddPatientModalOpen] = useState(false);
+    const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
     const [newPatientFormData, setNewPatientFormData] = useState({
         name: '',
         age: '',
@@ -113,6 +117,8 @@ const Billing = () => {
                     setPaidAmount("");
                 }
                 if (data.paymentMode) setPaymentMode(data.paymentMode);
+                if (data.isSplitPayment) setIsSplitPayment(data.isSplitPayment);
+                if (data.splitPayments) setSplitPayments(data.splitPayments);
                 if (data.search) setPatientSearchQuery(data.search);
                 if (data.newPatient) setNewPatientFormData(data.newPatient);
             } catch (err) {
@@ -202,11 +208,13 @@ const Billing = () => {
             discount: discountAmount === "" ? 0 : (Number(discountAmount) || 0),
             paidAmount: paidAmount === "" ? 0 : (Number(paidAmount) || 0),
             paymentMode,
+            isSplitPayment,
+            splitPayments,
             search: patientSearchQuery,
             newPatient: newPatientFormData
         };
         localStorage.setItem('billingFormData', JSON.stringify(billingFormData));
-    }, [selectedPatient, selectedTests, discountAmount, paidAmount, paymentMode, patientSearchQuery, newPatientFormData]);
+    }, [selectedPatient, selectedTests, discountAmount, paidAmount, paymentMode, isSplitPayment, splitPayments, patientSearchQuery, newPatientFormData]);
 
     // Calculate billing amounts
     const subtotalAmount = selectedTests.reduce((total, test) => total + test.price, 0);
@@ -214,6 +222,25 @@ const Billing = () => {
     const paidAmountValue = paidAmount === "" || paidAmount === null ? 0 : Number(paidAmount) || 0;
     const totalAmount = subtotalAmount - discountValue;
     const balanceAmount = Math.max(0, totalAmount - paidAmountValue);
+
+    const handleAddSplitPayment = () => {
+        setSplitPayments([...splitPayments, { mode: 'UPI', amount: "" }]);
+    };
+
+    const handleRemoveSplitPayment = (index) => {
+        const newPayments = splitPayments.filter((_, i) => i !== index);
+        setSplitPayments(newPayments);
+    };
+
+    const handleSplitPaymentChange = (index, field, value) => {
+        const newPayments = [...splitPayments];
+        newPayments[index][field] = value;
+        setSplitPayments(newPayments);
+
+        // Update total paid amount
+        const totalPaid = newPayments.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+        setPaidAmount(String(totalPaid));
+    };
 
     const handleGenerateInvoice = async () => {
         if (!selectedPatient) {
@@ -232,7 +259,8 @@ const Billing = () => {
                 tests: selectedTests.map(test => test._id),
                 discount: discountValue,
                 paidAmount: paidAmountValue,
-                paymentMode
+                paymentMode: isSplitPayment ? 'Mixed' : paymentMode,
+                payments: isSplitPayment ? splitPayments.map(p => ({ mode: p.mode, amount: Number(p.amount) || 0 })) : [{ mode: paymentMode, amount: paidAmountValue }]
             };
             const { data } = await createInvoice(invoicePayload);
             setSuccessMessage(`Invoice Generated Successfully! Invoice ID: ${data.invoiceIds}`);
@@ -243,6 +271,8 @@ const Billing = () => {
             setSelectedTests([]);
             setDiscountAmount("");
             setPaidAmount("");
+            setSplitPayments([{ mode: 'Cash', amount: "" }]);
+            setIsSplitPayment(false);
             setPatientSearchQuery('');
             setNewPatientFormData({
                 name: '',
@@ -632,6 +662,7 @@ const Billing = () => {
 
     return (
         <div className="max-w-[1600px] mx-auto p-6 min-h-[calc(100vh-64px)]">
+            <Calculator isOpen={isCalculatorOpen} onClose={() => setIsCalculatorOpen(false)} />
             {/* Page Header */}
             <div className="flex items-center justify-between mb-8">
                 <div>
@@ -641,6 +672,16 @@ const Billing = () => {
                     </h1>
                     <p className="text-gray-500 mt-1 text-sm font-medium">Create new bills, manage patients, and record payments.</p>
                 </div>
+
+                <button
+                    onClick={() => setIsCalculatorOpen(true)}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-200 hover:shadow-indigo-300 hover:scale-105 transition-all border border-transparent"
+                    title="Open Calculator"
+                >
+                    <CalculatorIcon className="w-5 h-5 text-yellow-300" />
+                    Calculator
+                </button>
+
                 {lastGeneratedInvoice && successMessage && (
                     <div className="fixed inset-0 z-[100] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
                         <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
@@ -777,7 +818,7 @@ const Billing = () => {
                                     <div className="mt-4 pt-3 border-t border-primary-100/50">
                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Referred By</p>
                                         <p className="text-xs font-semibold text-gray-700 flex items-center gap-1">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                                             Dr. {selectedPatient.referringDoctor}
                                         </p>
                                     </div>
@@ -935,30 +976,81 @@ const Billing = () => {
 
                             {/* Payment Mode */}
                             <div>
-                                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 block">Payment Mode</label>
-                                <div className="grid grid-cols-3 gap-3">
-                                    {[
-                                        { value: 'Cash', icon: Wallet },
-                                        { value: 'UPI', icon: Smartphone },
-                                        { value: 'Card', icon: CreditCard }
-                                    ].map(mode => {
-                                        const Icon = mode.icon;
-                                        const active = paymentMode === mode.value;
-                                        return (
-                                            <button
-                                                key={mode.value}
-                                                onClick={() => setPaymentMode(mode.value)}
-                                                className={`flex flex-col items-center justify-center gap-2 p-3 rounded-xl border transition-all ${active
-                                                    ? 'bg-gray-900 text-white border-gray-900 shadow-lg'
-                                                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                                                    }`}
-                                            >
-                                                <Icon className={`w-5 h-5 ${active ? 'text-white' : 'text-gray-400'}`} />
-                                                <span className="text-xs font-bold">{mode.value}</span>
-                                            </button>
-                                        );
-                                    })}
+                                <div className="flex items-center justify-between mb-3">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Payment Mode</label>
+                                    <button
+                                        onClick={() => setIsSplitPayment(!isSplitPayment)}
+                                        className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-all ${isSplitPayment ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-500'}`}
+                                    >
+                                        {isSplitPayment ? '✓ Split Payment' : '+ Split Payment'}
+                                    </button>
                                 </div>
+
+                                {!isSplitPayment ? (
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {[
+                                            { value: 'Cash', icon: Wallet },
+                                            { value: 'UPI', icon: Smartphone },
+                                            { value: 'Card', icon: CreditCard }
+                                        ].map(mode => {
+                                            const Icon = mode.icon;
+                                            const active = paymentMode === mode.value;
+                                            return (
+                                                <button
+                                                    key={mode.value}
+                                                    onClick={() => setPaymentMode(mode.value)}
+                                                    className={`flex flex-col items-center justify-center gap-2 p-3 rounded-xl border transition-all ${active
+                                                        ? 'bg-gray-900 text-white border-gray-900 shadow-lg'
+                                                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                                        }`}
+                                                >
+                                                    <Icon className={`w-5 h-5 ${active ? 'text-white' : 'text-gray-400'}`} />
+                                                    <span className="text-xs font-bold">{mode.value}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {splitPayments.map((p, index) => (
+                                            <div key={index} className="flex gap-2 items-center bg-gray-50 p-2 rounded-xl border border-gray-100">
+                                                <select
+                                                    value={p.mode}
+                                                    onChange={(e) => handleSplitPaymentChange(index, 'mode', e.target.value)}
+                                                    className="bg-white border border-gray-200 rounded-lg text-xs font-bold p-1.5 outline-none focus:border-primary-500"
+                                                >
+                                                    <option value="Cash">Cash</option>
+                                                    <option value="UPI">UPI</option>
+                                                    <option value="Card">Card</option>
+                                                </select>
+                                                <div className="flex-1 flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2 py-1">
+                                                    <span className="text-gray-400 text-xs font-bold">₹</span>
+                                                    <input
+                                                        type="number"
+                                                        value={p.amount}
+                                                        onChange={(e) => handleSplitPaymentChange(index, 'amount', e.target.value)}
+                                                        className="w-full text-right font-bold text-gray-900 text-sm outline-none bg-transparent"
+                                                        placeholder="0"
+                                                    />
+                                                </div>
+                                                {splitPayments.length > 1 && (
+                                                    <button
+                                                        onClick={() => handleRemoveSplitPayment(index)}
+                                                        className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                                                    >
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                        <button
+                                            onClick={handleAddSplitPayment}
+                                            className="w-full py-2 border-2 border-dashed border-gray-200 text-gray-400 rounded-xl text-xs font-bold hover:border-primary-400 hover:text-primary-600 transition-all flex items-center justify-center gap-1"
+                                        >
+                                            <Plus className="w-3.5 h-3.5" /> Add Payment Part
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
 

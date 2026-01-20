@@ -1,5 +1,5 @@
 import React from 'react';
-import { UserPlus, Phone, Mail, MapPin, Stethoscope } from 'lucide-react';
+import { UserPlus, User, Phone, Mail, MapPin, Stethoscope } from 'lucide-react';
 
 const PatientForm = ({ formData, handleChange, handleRegister, fieldErrors, loading }) => {
     return (

@@ -336,13 +336,14 @@ const Dashboard = () => {
                         Quick Actions
                     </h3>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                     {[
                         { label: 'New Billing', icon: Plus, path: '/billing', color: 'bg-gradient-to-br from-primary-600 to-primary-700 text-white hover:from-primary-700 hover:to-primary-800 shadow-lg shadow-primary-200' },
                         { label: 'Register Patient', icon: UserPlus, path: '/registration', color: 'bg-gradient-to-br from-blue-50 to-blue-100 text-blue-700 hover:from-blue-100 hover:to-blue-200 border border-blue-200' },
                         { label: 'Collect Sample', icon: Beaker, path: '/lab/samples', color: 'bg-gradient-to-br from-amber-50 to-amber-100 text-amber-700 hover:from-amber-100 hover:to-amber-200 border border-amber-200' },
                         { label: 'Enter Results', icon: ClipboardList, path: '/lab/results', color: 'bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-700 hover:from-indigo-100 hover:to-indigo-200 border border-indigo-200' },
                         { label: 'View Reports', icon: FileText, path: '/reports', color: 'bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-700 hover:from-emerald-100 hover:to-emerald-200 border border-emerald-200' },
+                        { label: 'Record Expense', icon: DollarSign, path: '/expenses', color: 'bg-gradient-to-br from-rose-50 to-rose-100 text-rose-700 hover:from-rose-100 hover:to-rose-200 border border-rose-200' },
                     ].map((action, idx) => (
                         <button
                             key={idx}

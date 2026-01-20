@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { patientsAPI, billingAPI } from '../../services/api';
-import { Search, User, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, User, Printer, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PatientForm from '../../components/PatientForm';
+import DeleteConfirmModal from '../../components/DeleteConfirmModal';
 
 const PatientRegistration = () => {
     const [patients, setPatients] = useState([]);
@@ -12,6 +13,8 @@ const PatientRegistration = () => {
     });
     const [fieldErrors, setFieldErrors] = useState({});
     const [loading, setLoading] = useState(false);
+    const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null });
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Pagination State
     const [page, setPage] = useState(1);
@@ -56,9 +59,26 @@ const PatientRegistration = () => {
                 toast.error('No invoice found for this patient', { id: toastId });
             }
         } catch (error) {
-            console.error('Print error:', error);
             toast.dismiss(toastId);
             toast.error(error.message || 'Failed to fetch invoice', { id: toastId });
+        }
+    };
+
+    const handleDelete = (id) => {
+        setDeleteModal({ isOpen: true, id });
+    };
+
+    const confirmDelete = async () => {
+        setIsDeleting(true);
+        try {
+            await patientsAPI.delete(deleteModal.id);
+            toast.success('Patient deleted successfully');
+            setDeleteModal({ isOpen: false, id: null });
+            fetchPatients();
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to delete patient');
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -120,8 +140,7 @@ const PatientRegistration = () => {
             setPatients(data.patients || []);
             setPages(data.pages || 1);
             setPage(data.page || 1);
-        } catch (err) {
-            console.error(err);
+        } catch {
             toast.error('Failed to fetch patients');
         } finally {
             setLoading(false);
@@ -234,7 +253,6 @@ const PatientRegistration = () => {
             setFieldErrors({});
             fetchPatients();
         } catch (err) {
-            console.error('Registration error:', err);
             const errorMessage = err.response?.data?.message || err.message || 'Registration Failed.';
             toast.error(errorMessage);
         } finally {
@@ -352,6 +370,13 @@ const PatientRegistration = () => {
                                                         >
                                                             <Printer className="w-4 h-4" />
                                                         </button>
+                                                        <button
+                                                            onClick={() => handleDelete(patient._id)}
+                                                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200"
+                                                            title="Delete Patient"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -429,6 +454,15 @@ const PatientRegistration = () => {
                     </div>
                 </div>
             </div>
+
+            <DeleteConfirmModal
+                isOpen={deleteModal.isOpen}
+                onClose={() => setDeleteModal({ isOpen: false, id: null })}
+                onConfirm={confirmDelete}
+                title="Delete Patient"
+                message="Are you sure you want to delete this patient? This will permanently remove all their medical records and history."
+                loading={isDeleting}
+            />
         </div>
     );
 };

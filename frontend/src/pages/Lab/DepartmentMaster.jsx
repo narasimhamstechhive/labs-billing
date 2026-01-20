@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { departmentsAPI } from '../../services/api';
 import toast from 'react-hot-toast';
 import { Trash2, Plus, Building2, FileText, Search, X, Edit3, Save, RotateCcw, AlertTriangle } from 'lucide-react';
+import DeleteConfirmModal from '../../components/DeleteConfirmModal';
 
 const DepartmentMaster = () => {
     const [departments, setDepartments] = useState([]);
@@ -11,8 +12,8 @@ const DepartmentMaster = () => {
     const [loading, setLoading] = useState(false);
 
     // Delete Confirmation State
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [itemToDelete, setItemToDelete] = useState(null);
+    const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null });
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const fetchDepartments = async () => {
         try {
@@ -49,21 +50,21 @@ const DepartmentMaster = () => {
     };
 
     const handleDelete = (id) => {
-        setItemToDelete(id);
-        setShowDeleteConfirm(true);
+        setDeleteModal({ isOpen: true, id });
     };
 
     const confirmDelete = async () => {
-        if (!itemToDelete) return;
+        if (!deleteModal.id) return;
+        setIsDeleting(true);
         try {
-            await departmentsAPI.delete(itemToDelete);
+            await departmentsAPI.delete(deleteModal.id);
             toast.success('Department deleted successfully');
             fetchDepartments();
+            setDeleteModal({ isOpen: false, id: null });
         } catch (err) {
             toast.error('Failed to delete department');
         } finally {
-            setShowDeleteConfirm(false);
-            setItemToDelete(null);
+            setIsDeleting(false);
         }
     };
 
@@ -238,36 +239,14 @@ const DepartmentMaster = () => {
                     </div>
                 </div>
             </div>
-            {/* Confirmation Modal */}
-            {showDeleteConfirm && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="p-6 flex flex-col items-center text-center">
-                            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                                <AlertTriangle className="w-8 h-8 text-red-600" />
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Department?</h3>
-                            <p className="text-gray-500 mb-6">
-                                Are you sure you want to delete this department? This might affect existing tests.
-                            </p>
-                            <div className="flex gap-3 w-full">
-                                <button
-                                    onClick={() => setShowDeleteConfirm(false)}
-                                    className="flex-1 px-4 py-2.5 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors font-medium"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={confirmDelete}
-                                    className="flex-1 px-4 py-2.5 text-white bg-red-600 rounded-xl hover:bg-red-700 transition-colors font-medium shadow-lg shadow-red-500/20"
-                                >
-                                    Yes, Delete
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <DeleteConfirmModal
+                isOpen={deleteModal.isOpen}
+                onClose={() => setDeleteModal({ isOpen: false, id: null })}
+                onConfirm={confirmDelete}
+                title="Delete Department"
+                message="Are you sure you want to delete this department? This will permanentely remove the department and may affect linked tests."
+                loading={isDeleting}
+            />
         </div>
     );
 };

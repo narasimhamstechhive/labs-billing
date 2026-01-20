@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Receipt, Download, Printer, Search, Calendar, ChevronLeft, ChevronRight, FileText, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { billingAPI } from '../../services/api';
+import DeleteConfirmModal from '../../components/DeleteConfirmModal';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
@@ -16,7 +17,8 @@ const Transactions = () => {
     const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
     const [showExportModal, setShowExportModal] = useState(false);
     const [exportDates, setExportDates] = useState({ from: '', to: '' });
-    const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null });
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         fetchInvoices();
@@ -67,7 +69,7 @@ const Transactions = () => {
             if (!invoiceId) {
                 throw new Error('Invoice ID not found');
             }
-            
+
             const response = await billingAPI.printInvoice(invoiceId);
 
             // Check if response is HTML
@@ -96,7 +98,7 @@ const Transactions = () => {
 
                 // Add download button to the invoice HTML
                 let invoiceHTML = response.data;
-                
+
                 // Inject download button before closing body tag
                 const downloadButtonHTML = `
                     <div style="text-align: center; margin: 20px 0; padding: 20px;">
@@ -255,7 +257,7 @@ const Transactions = () => {
                         })();
                     </script>
                 `;
-                
+
                 // Insert button before closing body tag
                 invoiceHTML = invoiceHTML.replace('</body>', downloadButtonHTML + '</body>');
 
@@ -286,7 +288,7 @@ const Transactions = () => {
                     setTimeout(() => resolve(), 3000);
                     checkContent();
                 });
-                
+
                 toast.success('Invoice opened. Click "Download Document" button to download PDF.');
             } else {
                 throw new Error('Invalid response format. Expected HTML.');
@@ -314,7 +316,7 @@ const Transactions = () => {
             if (!invoiceId) {
                 throw new Error('Invoice ID not found');
             }
-            
+
             const response = await billingAPI.printInvoice(invoiceId);
 
             // Check if response is HTML
@@ -322,7 +324,7 @@ const Transactions = () => {
                 printWindow.document.open();
                 printWindow.document.write(response.data);
                 printWindow.document.close();
-                
+
                 // Wait for window content to fully load (same as download)
                 await new Promise((resolve) => {
                     if (printWindow.document.readyState === 'complete') {
@@ -353,10 +355,10 @@ const Transactions = () => {
                 });
 
                 await Promise.all(imagePromises);
-                
+
                 // Additional wait to ensure all content is fully rendered (same as download)
                 await new Promise(resolve => setTimeout(resolve, 500));
-                
+
                 // Auto print after content loads
                 printWindow.print();
             } else {
@@ -382,16 +384,24 @@ const Transactions = () => {
     };
 
     const handleDeleteInvoice = async (invoice) => {
+        setDeleteModal({ isOpen: true, id: invoice._id });
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteModal.id) return;
+        setIsDeleting(true);
         const toastId = toast.loading('Deleting invoice...');
         try {
-            await billingAPI.deleteInvoice(invoice._id);
+            await billingAPI.deleteInvoice(deleteModal.id);
             toast.dismiss(toastId);
             toast.success('Invoice deleted successfully');
-            setDeleteConfirm(null);
+            setDeleteModal({ isOpen: false, id: null });
             fetchInvoices(); // Refresh list
         } catch (error) {
             toast.dismiss(toastId);
             toast.error(error.response?.data?.message || 'Failed to delete invoice');
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -646,8 +656,8 @@ const Transactions = () => {
                                             <td className="px-6 py-4 font-bold text-error-600">₹{inv.balance?.toFixed(2) || '0.00'}</td>
                                             <td className="px-6 py-4">
                                                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${inv.status === 'Paid' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                                        inv.status === 'Partial' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                                            'bg-rose-50 text-rose-600 border-rose-100'
+                                                    inv.status === 'Partial' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                                        'bg-rose-50 text-rose-600 border-rose-100'
                                                     }`}>
                                                     {inv.status}
                                                 </span>
@@ -677,7 +687,7 @@ const Transactions = () => {
                                                         <Printer className="w-4 h-4" />
                                                     </button>
                                                     <button
-                                                        onClick={() => setDeleteConfirm(inv)}
+                                                        onClick={() => handleDeleteInvoice(inv)}
                                                         className="p-2 text-error-600 hover:bg-error-50 rounded-lg transition-colors"
                                                         title="Delete"
                                                     >
@@ -724,8 +734,8 @@ const Transactions = () => {
                                                     key={pageNum}
                                                     onClick={() => setPage(pageNum)}
                                                     className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${page === pageNum
-                                                            ? 'bg-primary-600 text-white'
-                                                            : 'text-gray-600 hover:bg-gray-100'
+                                                        ? 'bg-primary-600 text-white'
+                                                        : 'text-gray-600 hover:bg-gray-100'
                                                         }`}
                                                 >
                                                     {pageNum}
@@ -789,39 +799,14 @@ const Transactions = () => {
                 </div>
             )}
 
-            {/* Delete Confirmation Modal */}
-            {deleteConfirm && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
-                        <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-error-600 text-white">
-                            <h3 className="text-lg font-bold">Delete Invoice</h3>
-                            <button onClick={() => setDeleteConfirm(null)} className="p-1 hover:bg-white/10 rounded-lg">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="p-6">
-                            <p className="text-gray-700 mb-4">
-                                Are you sure you want to delete invoice <span className="font-bold">{deleteConfirm.invoiceIds}</span>?
-                                This action cannot be undone.
-                            </p>
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setDeleteConfirm(null)}
-                                    className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={() => handleDeleteInvoice(deleteConfirm)}
-                                    className="flex-1 px-4 py-2 bg-error-600 text-white rounded-lg font-medium hover:bg-error-700 transition-colors"
-                                >
-                                    Delete
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <DeleteConfirmModal
+                isOpen={deleteModal.isOpen}
+                onClose={() => setDeleteModal({ isOpen: false, id: null })}
+                onConfirm={confirmDelete}
+                title="Delete Invoice"
+                message="Are you sure you want to delete this invoice? This will permanently remove the billing record and associated data."
+                loading={isDeleting}
+            />
         </div>
     );
 };

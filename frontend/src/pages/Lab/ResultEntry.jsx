@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { reportsAPI } from '../../services/api';
 import { ClipboardList, AlertTriangle, CheckCircle2, ArrowLeft, Plus, Trash2, FileText, TestTube } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { LAB_TESTS_CONFIG } from '../../data/labTestsConfig';
 
 const ResultEntry = () => {
     const [samples, setSamples] = useState([]);
@@ -31,11 +32,16 @@ const ResultEntry = () => {
         setSelectedSample(sample);
         const initialResults = {};
         sample.tests.forEach(t => {
+            const config = LAB_TESTS_CONFIG[t.testName] || LAB_TESTS_CONFIG[Object.keys(LAB_TESTS_CONFIG).find(k => t.testName.includes(k))]; // Exact or partial match
+
             initialResults[t._id] = {
                 value: '',
                 remarks: '',
                 abnormal: false,
-                subtests: []
+                subtests: [],
+                dynamicValues: config ?
+                    config.reduce((acc, field) => ({ ...acc, [field.key]: '' }), {})
+                    : {}
             };
         });
         setResults(initialResults);
@@ -47,6 +53,19 @@ const ResultEntry = () => {
             [testId]: {
                 ...prev[testId],
                 [field]: value
+            }
+        }));
+    };
+
+    const handleDynamicFieldChange = (testId, key, value) => {
+        setResults(prev => ({
+            ...prev,
+            [testId]: {
+                ...prev[testId],
+                dynamicValues: {
+                    ...prev[testId].dynamicValues,
+                    [key]: value
+                }
             }
         }));
     };
@@ -88,21 +107,91 @@ const ResultEntry = () => {
     };
 
     const handleSubmit = async () => {
+        // Validation
+        const errors = [];
+        Object.keys(results).forEach(testId => {
+            const test = selectedSample.tests.find(t => t._id === testId);
+            if (test) {
+                const config = LAB_TESTS_CONFIG[test.testName] || LAB_TESTS_CONFIG[Object.keys(LAB_TESTS_CONFIG).find(k => test.testName.includes(k))];
+                if (config) {
+                    config.forEach(field => {
+                        if (field.priority === 'high' && (!results[testId].dynamicValues?.[field.key] || results[testId].dynamicValues[field.key].toString().trim() === '')) {
+                            errors.push(`${field.label} is required for ${test.testName}`);
+                        }
+                    });
+                }
+            }
+        });
+
+        if (errors.length > 0) {
+            errors.slice(0, 3).forEach(err => toast.error(err));
+            if (errors.length > 3) toast.error(`And ${errors.length - 3} more errors...`);
+            return;
+        }
+
         setLoading(true);
         try {
             const payload = {
                 sampleId: selectedSample._id,
-                results: Object.keys(results).map(testId => ({
-                    testId,
-                    ...results[testId]
-                }))
+                results: Object.keys(results).map(testId => {
+                    const resultData = results[testId];
+                    const test = selectedSample.tests.find(t => t._id === testId);
+
+                    let finalValue = resultData.value;
+                    let finalSubtests = [...(resultData.subtests || [])];
+
+                    // Transform dynamicValues into subtests if they exist
+                    if (resultData.dynamicValues && Object.keys(resultData.dynamicValues).length > 0 && test) {
+                        const config = LAB_TESTS_CONFIG[test.testName] || LAB_TESTS_CONFIG[Object.keys(LAB_TESTS_CONFIG).find(k => test.testName.includes(k))];
+
+                        if (config) {
+                            // If we have dynamic values, we use them to populate subtests
+                            const dynamicSubtests = config.map(field => {
+                                const val = resultData.dynamicValues[field.key];
+                                if (val === undefined || val === '') return null;
+                                return {
+                                    testName: field.label,
+                                    resultValue: val,
+                                    unit: field.unit || '',
+                                    normalRange: '', // Could be filled from config logic if complex
+                                    abnormal: false // Logic could be added here to compare against range
+                                };
+                            }).filter(Boolean); // Remove nulls
+
+                            finalSubtests = [...finalSubtests, ...dynamicSubtests];
+
+                            // If main value is empty but we have subtests, set a placeholder or summary
+                            if (!finalValue) {
+                                // For single-value logic (like just Haemoglobin), we might want to promote it
+                                if (dynamicSubtests.length === 1 && dynamicSubtests[0].testName === test.testName) {
+                                    finalValue = dynamicSubtests[0].resultValue;
+                                } else {
+                                    finalValue = "See Parameters";
+                                }
+                            }
+                        }
+                    }
+
+                    // Fallback to avoid empty resultValue error
+                    if (!finalValue) finalValue = "Completed";
+
+                    return {
+                        testId,
+                        value: finalValue,
+                        remarks: resultData.remarks,
+                        abnormal: resultData.abnormal,
+                        subtests: finalSubtests
+                    };
+                })
             };
+
             await reportsAPI.submit(payload);
             toast.success('Results submitted successfully!');
             setSelectedSample(null);
             fetchSamples();
         } catch (err) {
-            toast.error('Failed to submit results');
+            console.error(err);
+            toast.error(err.response?.data?.message || 'Failed to submit results');
         } finally {
             setLoading(false);
         }
@@ -151,8 +240,8 @@ const ResultEntry = () => {
                                 >
                                     <div className="absolute top-4 right-4">
                                         <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${s.sampleType === 'Blood' ? 'bg-rose-50 text-rose-600' :
-                                                s.sampleType === 'Urine' ? 'bg-yellow-50 text-yellow-600' :
-                                                    'bg-gray-100 text-gray-600'
+                                            s.sampleType === 'Urine' ? 'bg-yellow-50 text-yellow-600' :
+                                                'bg-gray-100 text-gray-600'
                                             }`}>
                                             {s.sampleType}
                                         </span>
@@ -248,135 +337,213 @@ const ResultEntry = () => {
                         </div>
                     </div>
 
-                    {/* Result Entry Form */}
                     <div className="space-y-6">
-                        {selectedSample.tests.map(test => (
-                            <div key={test._id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                                {/* Test Header */}
-                                <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                    <div>
-                                        <h4 className="font-bold text-gray-900 text-lg flex items-center gap-2">
-                                            <TestTube className="w-5 h-5 text-gray-400" />
-                                            {test.testName}
-                                        </h4>
-                                        <p className="text-xs text-gray-500 mt-1 pl-7">
-                                            Ref. Range: <span className="font-medium text-gray-700">{test.normalRanges?.general || `${test.normalRanges?.male?.min || 0} - ${test.normalRanges?.male?.max || 0}`}</span>
-                                            <span className="mx-2">•</span>
-                                            Unit: <span className="font-medium text-gray-700">{test.unit || 'N/A'}</span>
-                                        </p>
-                                    </div>
-                                    <button
-                                        onClick={() => handleAddSubtest(test._id)}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:text-primary-600 transition-colors shadow-sm"
-                                    >
-                                        <Plus className="w-4 h-4" /> Add Parameter
-                                    </button>
-                                </div>
+                        {selectedSample.tests.map(test => {
+                            // Find config for this test
+                            const config = LAB_TESTS_CONFIG[test.testName] || LAB_TESTS_CONFIG[Object.keys(LAB_TESTS_CONFIG).find(k => test.testName.includes(k))];
 
-                                <div className="p-6">
-                                    {/* Main Result Fields */}
-                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
-                                        <div className="md:col-span-4 space-y-1.5">
-                                            <label className="text-xs font-bold uppercase tracking-wide text-gray-500">Result Value</label>
-                                            <input
-                                                placeholder="Enter Value"
-                                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 font-bold text-gray-900"
-                                                value={results[test._id]?.value || ''}
-                                                onChange={e => handleResultChange(test._id, 'value', e.target.value)}
-                                            />
+                            return (
+                                <div key={test._id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                                    {/* Test Header */}
+                                    <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                        <div>
+                                            <h4 className="font-bold text-gray-900 text-lg flex items-center gap-2">
+                                                <TestTube className="w-5 h-5 text-gray-400" />
+                                                {test.testName}
+                                            </h4>
+                                            <p className="text-xs text-gray-500 mt-1 pl-7">
+                                                Ref. Range: <span className="font-medium text-gray-700">{test.normalRanges?.general || `${test.normalRanges?.male?.min || 0} - ${test.normalRanges?.male?.max || 0}`}</span>
+                                                <span className="mx-2">•</span>
+                                                Unit: <span className="font-medium text-gray-700">{test.unit || 'N/A'}</span>
+                                            </p>
                                         </div>
-                                        <div className="md:col-span-6 space-y-1.5">
-                                            <label className="text-xs font-bold uppercase tracking-wide text-gray-500">Remarks</label>
-                                            <input
-                                                placeholder="Any observations..."
-                                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 text-gray-700"
-                                                value={results[test._id]?.remarks || ''}
-                                                onChange={e => handleResultChange(test._id, 'remarks', e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="md:col-span-2 pt-6">
-                                            <label className={`flex items-center justify-center gap-2 px-3 py-2.5 border rounded-lg cursor-pointer transition-all select-none ${results[test._id]?.abnormal ? 'bg-rose-50 border-rose-200 text-rose-700 font-bold' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={results[test._id]?.abnormal || false}
-                                                    onChange={e => handleResultChange(test._id, 'abnormal', e.target.checked)}
-                                                    className="hidden"
-                                                />
-                                                <AlertTriangle className={`w-4 h-4 ${results[test._id]?.abnormal ? 'block' : 'hidden md:block'}`} />
-                                                <span className="text-sm">{results[test._id]?.abnormal ? 'Abnormal' : 'Normal'}</span>
-                                            </label>
-                                        </div>
+                                        {/* Allow adding manual subtests only if no config exists, or if users want to add extras */}
+                                        {!config && (
+                                            <button
+                                                onClick={() => handleAddSubtest(test._id)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:text-primary-600 transition-colors shadow-sm"
+                                            >
+                                                <Plus className="w-4 h-4" /> Add Parameter
+                                            </button>
+                                        )}
                                     </div>
 
-                                    {/* Subtests Table */}
-                                    {results[test._id]?.subtests?.length > 0 && (
-                                        <div className="mt-8">
-                                            <h5 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-2">Sub-Parameters</h5>
-                                            <div className="border border-gray-200 rounded-lg overflow-hidden">
-                                                <table className="w-full text-sm text-left">
-                                                    <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-200">
-                                                        <tr>
-                                                            <th className="px-4 py-2 w-1/3">Parameter Name</th>
-                                                            <th className="px-4 py-2 w-1/4">Result</th>
-                                                            <th className="px-4 py-2">Unit</th>
-                                                            <th className="px-4 py-2">Ref. Range</th>
-                                                            <th className="px-4 py-2 w-10"></th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-gray-100">
-                                                        {results[test._id].subtests.map((sub, sIdx) => (
-                                                            <tr key={sIdx} className="bg-white hover:bg-gray-50/50">
-                                                                <td className="p-2 pl-4">
-                                                                    <input
-                                                                        placeholder="Parameter Name"
-                                                                        className="w-full px-2 py-1.5 bg-transparent border-b border-transparent focus:border-primary-400 focus:outline-none font-medium text-gray-900 transition-colors"
-                                                                        value={sub.testName}
-                                                                        onChange={e => handleSubtestChange(test._id, sIdx, 'testName', e.target.value)}
-                                                                    />
-                                                                </td>
-                                                                <td className="p-2">
-                                                                    <input
-                                                                        placeholder="Value"
-                                                                        className="w-full px-2 py-1.5 bg-transparent border-b border-transparent focus:border-primary-400 focus:outline-none font-bold text-primary-700 transition-colors"
-                                                                        value={sub.resultValue}
-                                                                        onChange={e => handleSubtestChange(test._id, sIdx, 'resultValue', e.target.value)}
-                                                                    />
-                                                                </td>
-                                                                <td className="p-2">
-                                                                    <input
-                                                                        placeholder="Unit"
-                                                                        className="w-full px-2 py-1.5 bg-transparent border-b border-transparent focus:border-primary-400 focus:outline-none text-gray-500 text-xs"
-                                                                        value={sub.unit}
-                                                                        onChange={e => handleSubtestChange(test._id, sIdx, 'unit', e.target.value)}
-                                                                    />
-                                                                </td>
-                                                                <td className="p-2">
-                                                                    <input
-                                                                        placeholder="Range"
-                                                                        className="w-full px-2 py-1.5 bg-transparent border-b border-transparent focus:border-primary-400 focus:outline-none text-gray-500 italic text-xs"
-                                                                        value={sub.normalRange}
-                                                                        onChange={e => handleSubtestChange(test._id, sIdx, 'normalRange', e.target.value)}
-                                                                    />
-                                                                </td>
-                                                                <td className="p-2 pr-4 text-center">
-                                                                    <button
-                                                                        onClick={() => removeSubtest(test._id, sIdx)}
-                                                                        className="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors"
-                                                                        title="Remove Parameter"
-                                                                    >
-                                                                        <Trash2 className="w-4 h-4" />
-                                                                    </button>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
+                                    <div className="p-6">
+                                        {/* Dynamic Form Generation */}
+                                        {config ? (
+                                            <div className="space-y-6">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                    {config.map((field) => (
+                                                        <div key={field.key} className="space-y-1.5">
+                                                            <div className="flex items-center justify-between">
+                                                                <label className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                                                                    {field.label} {field.priority === 'high' && <span className="text-red-500">*</span>}
+                                                                </label>
+                                                                <span className="text-xs text-gray-400 font-mono">{field.unit}</span>
+                                                            </div>
+
+                                                            {field.type === 'select' ? (
+                                                                <select
+                                                                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 font-medium text-gray-900 bg-white"
+                                                                    value={results[test._id]?.dynamicValues?.[field.key] || ''}
+                                                                    onChange={e => handleDynamicFieldChange(test._id, field.key, e.target.value)}
+                                                                >
+                                                                    <option value="">Select...</option>
+                                                                    {field.options.map(opt => (
+                                                                        <option key={opt} value={opt}>{opt}</option>
+                                                                    ))}
+                                                                </select>
+                                                            ) : field.type === 'textarea' ? (
+                                                                <textarea
+                                                                    rows={3}
+                                                                    placeholder={`Enter ${field.label}`}
+                                                                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 font-medium text-gray-900"
+                                                                    value={results[test._id]?.dynamicValues?.[field.key] || ''}
+                                                                    onChange={e => handleDynamicFieldChange(test._id, field.key, e.target.value)}
+                                                                />
+                                                            ) : (
+                                                                (() => {
+                                                                    let placeholder = `Enter ${field.label}`;
+                                                                    if (field.label.toLowerCase().includes('hemoglobin')) placeholder = "e.g., 13.5";
+                                                                    else if (field.label.toLowerCase().includes('count')) placeholder = "e.g., 5000";
+                                                                    else if (field.label.toLowerCase().includes('sugar') || field.label.toLowerCase().includes('glucose')) placeholder = "e.g., 95";
+                                                                    else if (field.unit === '%') placeholder = "e.g., 45";
+                                                                    return (
+                                                                        <input
+                                                                            type={field.type === 'number' ? 'number' : 'text'}
+                                                                            placeholder={placeholder}
+                                                                            step="any"
+                                                                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 font-bold text-gray-900"
+                                                                            value={results[test._id]?.dynamicValues?.[field.key] || ''}
+                                                                            onChange={e => handleDynamicFieldChange(test._id, field.key, e.target.value)}
+                                                                        />
+                                                                    );
+                                                                })()
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                {/* Common Remarks for Dynamic Tests */}
+                                                <div className="space-y-1.5 pt-4 border-t border-gray-100">
+                                                    <label className="text-xs font-bold uppercase tracking-wide text-gray-500">Overall Remarks</label>
+                                                    <input
+                                                        placeholder="Any observations..."
+                                                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 text-gray-700"
+                                                        value={results[test._id]?.remarks || ''}
+                                                        onChange={e => handleResultChange(test._id, 'remarks', e.target.value)}
+                                                    />
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        ) : (
+                                            /* Fallback for Unknown Tests */
+                                            <>
+                                                {/* Main Result Fields */}
+                                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                                                    <div className="md:col-span-4 space-y-1.5">
+                                                        <label className="text-xs font-bold uppercase tracking-wide text-gray-500">Result Value</label>
+                                                        <input
+                                                            placeholder="Enter Value"
+                                                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 font-bold text-gray-900"
+                                                            value={results[test._id]?.value || ''}
+                                                            onChange={e => handleResultChange(test._id, 'value', e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <div className="md:col-span-6 space-y-1.5">
+                                                        <label className="text-xs font-bold uppercase tracking-wide text-gray-500">Remarks</label>
+                                                        <input
+                                                            placeholder="Any observations..."
+                                                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 text-gray-700"
+                                                            value={results[test._id]?.remarks || ''}
+                                                            onChange={e => handleResultChange(test._id, 'remarks', e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <div className="md:col-span-2 pt-6">
+                                                        <label className={`flex items-center justify-center gap-2 px-3 py-2.5 border rounded-lg cursor-pointer transition-all select-none ${results[test._id]?.abnormal ? 'bg-rose-50 border-rose-200 text-rose-700 font-bold' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={results[test._id]?.abnormal || false}
+                                                                onChange={e => handleResultChange(test._id, 'abnormal', e.target.checked)}
+                                                                className="hidden"
+                                                            />
+                                                            <AlertTriangle className={`w-4 h-4 ${results[test._id]?.abnormal ? 'block' : 'hidden md:block'}`} />
+                                                            <span className="text-sm">{results[test._id]?.abnormal ? 'Abnormal' : 'Normal'}</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                                {/* Subtests Table */}
+                                                {results[test._id]?.subtests?.length > 0 && (
+                                                    <div className="mt-8">
+                                                        <h5 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-2">Sub-Parameters</h5>
+                                                        <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                                            <table className="w-full text-sm text-left">
+                                                                <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-200">
+                                                                    <tr>
+                                                                        <th className="px-4 py-2 w-1/3">Parameter Name</th>
+                                                                        <th className="px-4 py-2 w-1/4">Result</th>
+                                                                        <th className="px-4 py-2">Unit</th>
+                                                                        <th className="px-4 py-2">Ref. Range</th>
+                                                                        <th className="px-4 py-2 w-10"></th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-gray-100">
+                                                                    {results[test._id].subtests.map((sub, sIdx) => (
+                                                                        <tr key={sIdx} className="bg-white hover:bg-gray-50/50">
+                                                                            <td className="p-2 pl-4">
+                                                                                <input
+                                                                                    placeholder="Parameter Name"
+                                                                                    className="w-full px-2 py-1.5 bg-transparent border-b border-transparent focus:border-primary-400 focus:outline-none font-medium text-gray-900 transition-colors"
+                                                                                    value={sub.testName}
+                                                                                    onChange={e => handleSubtestChange(test._id, sIdx, 'testName', e.target.value)}
+                                                                                />
+                                                                            </td>
+                                                                            <td className="p-2">
+                                                                                <input
+                                                                                    placeholder="Value"
+                                                                                    className="w-full px-2 py-1.5 bg-transparent border-b border-transparent focus:border-primary-400 focus:outline-none font-bold text-primary-700 transition-colors"
+                                                                                    value={sub.resultValue}
+                                                                                    onChange={e => handleSubtestChange(test._id, sIdx, 'resultValue', e.target.value)}
+                                                                                />
+                                                                            </td>
+                                                                            <td className="p-2">
+                                                                                <input
+                                                                                    placeholder="Unit"
+                                                                                    className="w-full px-2 py-1.5 bg-transparent border-b border-transparent focus:border-primary-400 focus:outline-none text-gray-500 text-xs"
+                                                                                    value={sub.unit}
+                                                                                    onChange={e => handleSubtestChange(test._id, sIdx, 'unit', e.target.value)}
+                                                                                />
+                                                                            </td>
+                                                                            <td className="p-2">
+                                                                                <input
+                                                                                    placeholder="Range"
+                                                                                    className="w-full px-2 py-1.5 bg-transparent border-b border-transparent focus:border-primary-400 focus:outline-none text-gray-500 italic text-xs"
+                                                                                    value={sub.normalRange}
+                                                                                    onChange={e => handleSubtestChange(test._id, sIdx, 'normalRange', e.target.value)}
+                                                                                />
+                                                                            </td>
+                                                                            <td className="p-2 pr-4 text-center">
+                                                                                <button
+                                                                                    onClick={() => removeSubtest(test._id, sIdx)}
+                                                                                    className="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors"
+                                                                                    title="Remove Parameter"
+                                                                                >
+                                                                                    <Trash2 className="w-4 h-4" />
+                                                                                </button>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
                     {/* Submit Button */}

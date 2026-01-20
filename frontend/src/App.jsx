@@ -17,6 +17,8 @@ const Transactions = lazy(() => import('./pages/Transactions/Transactions'));
 const Reports = lazy(() => import('./pages/Reports/Reports'));
 const Settings = lazy(() => import('./pages/Settings/Settings'));
 const Analytics = lazy(() => import('./pages/Analytics/Analytics'));
+const Placeholder = lazy(() => import('./pages/Placeholder/Placeholder'));
+const ExpenseManager = lazy(() => import('./pages/Expenses/ExpenseManager'));
 
 // Loading component
 const LoadingSpinner = () => (
@@ -49,115 +51,141 @@ function App() {
       <Router>
         <Toaster position="top-center" reverseOrder={false} />
         <Routes>
-        <Route
-          path="/login"
-          element={
-            <PublicRoute>
-              <Login />
-            </PublicRoute>
-          }
-        />
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <Login />
+              </PublicRoute>
+            }
+          />
 
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route 
-            path="dashboard" 
+          <Route
+            path="/"
             element={
-              <Suspense fallback={<LoadingSpinner />}>
-                <Dashboard />
-              </Suspense>
-            } 
-          />
-          <Route 
-            path="registration" 
-            element={
-              <Suspense fallback={<LoadingSpinner />}>
-                <PatientRegistration />
-              </Suspense>
-            } 
-          />
-          <Route 
-            path="lab/departments" 
-            element={
-              <Suspense fallback={<LoadingSpinner />}>
-                <DepartmentMaster />
-              </Suspense>
-            } 
-          />
-          <Route 
-            path="lab/tests" 
-            element={
-              <Suspense fallback={<LoadingSpinner />}>
-                <TestMaster />
-              </Suspense>
-            } 
-          />
-          <Route 
-            path="lab/samples" 
-            element={
-              <Suspense fallback={<LoadingSpinner />}>
-                <SampleCollection />
-              </Suspense>
-            } 
-          />
-          <Route 
-            path="lab/results" 
-            element={
-              <Suspense fallback={<LoadingSpinner />}>
-                <ResultEntry />
-              </Suspense>
-            } 
-          />
-          <Route 
-            path="billing" 
-            element={
-              <Suspense fallback={<LoadingSpinner />}>
-                <Billing />
-              </Suspense>
-            } 
-          />
-          <Route 
-            path="transactions" 
-            element={
-              <Suspense fallback={<LoadingSpinner />}>
-                <Transactions />
-              </Suspense>
-            } 
-          />
-          <Route 
-            path="reports" 
-            element={
-              <Suspense fallback={<LoadingSpinner />}>
-                <Reports />
-              </Suspense>
-            } 
-          />
-          <Route 
-            path="analytics" 
-            element={
-              <Suspense fallback={<LoadingSpinner />}>
-                <Analytics />
-              </Suspense>
-            } 
-          />
-          <Route 
-            path="settings" 
-            element={
-              <Suspense fallback={<LoadingSpinner />}>
-                <Settings />
-              </Suspense>
-            } 
-          />
-        </Route>
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route
+              path="dashboard"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <Dashboard />
+                </Suspense>
+              }
+            />
+            <Route
+              path="registration"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <PatientRegistration />
+                </Suspense>
+              }
+            />
+            <Route
+              path="lab/departments"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <DepartmentMaster />
+                </Suspense>
+              }
+            />
+            <Route
+              path="lab/tests"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <TestMaster />
+                </Suspense>
+              }
+            />
+            <Route
+              path="lab/samples"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <SampleCollection />
+                </Suspense>
+              }
+            />
+            <Route
+              path="lab/results"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <ResultEntry />
+                </Suspense>
+              }
+            />
+            <Route
+              path="billing"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <Billing />
+                </Suspense>
+              }
+            />
+            <Route
+              path="transactions"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <Transactions />
+                </Suspense>
+              }
+            />
+            <Route
+              path="reports"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <Reports />
+                </Suspense>
+              }
+            />
+            <Route
+              path="analytics"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <Analytics />
+                </Suspense>
+              }
+            />
+            <Route
+              path="settings"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <Settings />
+                </Suspense>
+              }
+            />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+            {/* New Feature Placeholders */}
+            <Route
+              path="inventory"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <Placeholder />
+                </Suspense>
+              }
+            />
+            <Route
+              path="expenses"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <ExpenseManager />
+                </Suspense>
+              }
+            />
+            <Route
+              path="lab/doctors"
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <Placeholder />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
     </ErrorBoundary>

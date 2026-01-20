@@ -111,11 +111,11 @@ export const billingAPI = {
     createInvoice: (data) => api.post('/billing/create', data),
     getInvoices: (params) => api.get('/billing', { params }),
     deleteInvoice: (id) => api.delete(`/billing/${id}`),
-    
+
     // Stats
     getStats: (params) => api.get('/billing/stats', { params }),
     getDailyStats: (params) => api.get('/billing/daily-stats', { params }),
-    
+
     // Print/Download
     printInvoice: (id) => api.get(`/billing/print/${id}`, {
         responseType: 'text',
@@ -143,7 +143,10 @@ export const reportsAPI = {
     submit: (data) => api.post('/reports/submit', data),
     approve: (sampleId) => api.put(`/reports/approve/${sampleId}`),
     print: (sampleId) => api.get(`/reports/print/${sampleId}`, {
-        responseType: 'blob'
+        responseType: 'text',
+        headers: {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        }
     }),
 };
 
@@ -156,6 +159,15 @@ export const settingsAPI = {
     uploadLogo: (formData) => api.post('/settings/logo', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
     }),
+};
+
+// ============================================
+// EXPENSES API
+// ============================================
+export const expensesAPI = {
+    getAll: () => api.get('/expenses'),
+    create: (data) => api.post('/expenses', data),
+    delete: (id) => api.delete(`/expenses/${id}`),
 };
 
 // ============================================
@@ -177,6 +189,7 @@ export const deleteTest = testsAPI.delete;
 export const getPatients = patientsAPI.getAll;
 export const registerPatient = patientsAPI.create;
 export const getPatientById = patientsAPI.getById;
+export const deletePatient = patientsAPI.delete;
 
 export const createInvoice = billingAPI.createInvoice;
 export const getInvoices = billingAPI.getInvoices;
@@ -196,6 +209,10 @@ export const printReport = reportsAPI.print;
 export const getSettings = settingsAPI.get;
 export const updateSettings = settingsAPI.update;
 export const uploadLogo = settingsAPI.uploadLogo;
+
+export const getExpenses = expensesAPI.getAll;
+export const createExpense = expensesAPI.create;
+export const deleteExpense = expensesAPI.delete;
 
 // Export default api instance for direct use if needed
 export default api;

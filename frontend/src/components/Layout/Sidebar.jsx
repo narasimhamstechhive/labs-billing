@@ -15,7 +15,8 @@ import {
     TrendingUp,
     FileText,
     Package,
-    Stethoscope
+    Stethoscope,
+    DollarSign
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -30,12 +31,14 @@ const Sidebar = () => {
         { path: '/lab/samples', icon: TestTube, label: 'Sample Collection' },
         { path: '/lab/results', icon: ClipboardList, label: 'Result Entry' },
         { path: '/reports', icon: FileCheck, label: 'Approved Reports' },
+        { path: '/expenses', icon: DollarSign, label: 'Expence Manager' },
         { path: '/analytics', icon: TrendingUp, label: 'Analytics' },
 
         { path: '/settings', icon: Settings, label: 'Lab Settings', isSystem: true }, // Added flag for styling
 
         { path: '/lab/departments', icon: Beaker, label: 'Department Master', isMaster: true },
         { path: '/lab/tests', icon: Activity, label: 'Test Master', isMaster: true },
+        { path: '/lab/doctors', icon: Stethoscope, label: 'Doctor Master', isMaster: true },
     ];
 
     const isActive = (path) => location.pathname === path;
