@@ -232,7 +232,7 @@ const Login = () => {
                     </div>
 
                     <p className="text-center text-[10px] font-bold text-slate-600 mt-8 uppercase tracking-[0.3em]">
-                        &copy; 2026 MediLab Intelligent Systems
+                        All rights reserved by <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent font-black">Ms tech Hive</span>
                     </p>
                 </div>
             </div>

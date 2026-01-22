@@ -152,16 +152,37 @@ export const testsAPI = {
 // PATIENTS API
 // ============================================
 export const patientsAPI = {
-    getAll: (params) => {
+    getAll: async (params) => {
+        const cacheKey = params ? `patients_${JSON.stringify(params)}` : 'patients_all';
+        const cached = cacheService.get(cacheKey);
+        if (cached) return { data: cached };
+
+        let res;
         if (typeof params === 'string') {
-            return api.get(`/patients?keyword=${params}`);
+            res = await api.get(`/patients?keyword=${params}`);
+        } else {
+            res = await api.get('/patients', { params });
         }
-        return api.get('/patients', { params });
+
+        cacheService.set(cacheKey, res.data);
+        return res;
     },
     getById: (id) => api.get(`/patients/${id}`),
-    create: (data) => api.post('/patients', data),
-    update: (id, data) => api.put(`/patients/${id}`, data),
-    delete: (id) => api.delete(`/patients/${id}`),
+    create: async (data) => {
+        const res = await api.post('/patients', data);
+        cacheService.invalidatePattern('patients');
+        return res;
+    },
+    update: async (id, data) => {
+        const res = await api.put(`/patients/${id}`, data);
+        cacheService.invalidatePattern('patients');
+        return res;
+    },
+    delete: async (id) => {
+        const res = await api.delete(`/patients/${id}`);
+        cacheService.invalidatePattern('patients');
+        return res;
+    },
 };
 
 // ============================================
@@ -169,13 +190,45 @@ export const patientsAPI = {
 // ============================================
 export const billingAPI = {
     // Invoices
-    createInvoice: (data) => api.post('/billing/create', data),
-    getInvoices: (params) => api.get('/billing', { params }),
-    deleteInvoice: (id) => api.delete(`/billing/${id}`),
+    createInvoice: async (data) => {
+        const res = await api.post('/billing/create', data);
+        cacheService.invalidatePattern('invoices');
+        cacheService.invalidatePattern('billing_stats');
+        return res;
+    },
+    getInvoices: async (params) => {
+        const cacheKey = params ? `invoices_${JSON.stringify(params)}` : 'invoices_all';
+        const cached = cacheService.get(cacheKey);
+        if (cached) return { data: cached };
+
+        const res = await api.get('/billing', { params });
+        cacheService.set(cacheKey, res.data);
+        return res;
+    },
+    deleteInvoice: async (id) => {
+        const res = await api.delete(`/billing/${id}`);
+        cacheService.invalidatePattern('invoices');
+        cacheService.invalidatePattern('billing_stats');
+        return res;
+    },
 
     // Stats
-    getStats: (params) => api.get('/billing/stats', { params }),
-    getDailyStats: (params) => api.get('/billing/daily-stats', { params }),
+    getStats: async (params) => {
+        const cacheKey = params ? `billing_stats_${JSON.stringify(params)}` : 'billing_stats_all';
+        const cached = cacheService.get(cacheKey);
+        if (cached) return { data: cached };
+        const res = await api.get('/billing/stats', { params });
+        cacheService.set(cacheKey, res.data);
+        return res;
+    },
+    getDailyStats: async (params) => {
+        const cacheKey = params ? `billing_daily_stats_${JSON.stringify(params)}` : 'billing_daily_stats_all';
+        const cached = cacheService.get(cacheKey);
+        if (cached) return { data: cached };
+        const res = await api.get('/billing/daily-stats', { params });
+        cacheService.set(cacheKey, res.data);
+        return res;
+    },
 
     // Print/Download
     printInvoice: (id) => api.get(`/billing/print/${id}`, {
@@ -190,19 +243,53 @@ export const billingAPI = {
 // SAMPLES API
 // ============================================
 export const samplesAPI = {
-    getAll: (params) => api.get('/samples', { params }),
+    getAll: async (params) => {
+        const cacheKey = params ? `samples_${JSON.stringify(params)}` : 'samples_all';
+        const cached = cacheService.get(cacheKey);
+        if (cached) return { data: cached };
+        const res = await api.get('/samples', { params });
+        cacheService.set(cacheKey, res.data);
+        return res;
+    },
     getById: (id) => api.get(`/samples/${id}`),
-    updateStatus: (id, data) => api.put(`/samples/${id}/status`, data),
-    delete: (id) => api.delete(`/samples/${id}`),
+    updateStatus: async (id, data) => {
+        const res = await api.put(`/samples/${id}/status`, data);
+        cacheService.invalidatePattern('samples');
+        cacheService.invalidatePattern('reports');
+        return res;
+    },
+    delete: async (id) => {
+        const res = await api.delete(`/samples/${id}`);
+        cacheService.invalidatePattern('samples');
+        cacheService.invalidatePattern('reports');
+        return res;
+    },
 };
 
 // ============================================
 // REPORTS API
 // ============================================
 export const reportsAPI = {
-    getPending: (params) => api.get('/reports/pending', { params }),
-    submit: (data) => api.post('/reports/submit', data),
-    approve: (sampleId) => api.put(`/reports/approve/${sampleId}`),
+    getPending: async (params) => {
+        const cacheKey = params ? `reports_pending_${JSON.stringify(params)}` : 'reports_pending_all';
+        const cached = cacheService.get(cacheKey);
+        if (cached) return { data: cached };
+        const res = await api.get('/reports/pending', { params });
+        cacheService.set(cacheKey, res.data);
+        return res;
+    },
+    submit: async (data) => {
+        const res = await api.post('/reports/submit', data);
+        cacheService.invalidatePattern('reports');
+        cacheService.invalidatePattern('samples');
+        return res;
+    },
+    approve: async (sampleId) => {
+        const res = await api.put(`/reports/approve/${sampleId}`);
+        cacheService.invalidatePattern('reports');
+        cacheService.invalidatePattern('samples');
+        return res;
+    },
     print: (sampleId) => api.get(`/reports/print/${sampleId}`, {
         responseType: 'text',
         headers: {
@@ -226,9 +313,23 @@ export const settingsAPI = {
 // EXPENSES API
 // ============================================
 export const expensesAPI = {
-    getAll: () => api.get('/expenses'),
-    create: (data) => api.post('/expenses', data),
-    delete: (id) => api.delete(`/expenses/${id}`),
+    getAll: async () => {
+        const cached = cacheService.get('expenses');
+        if (cached) return { data: cached };
+        const res = await api.get('/expenses');
+        cacheService.set('expenses', res.data);
+        return res;
+    },
+    create: async (data) => {
+        const res = await api.post('/expenses', data);
+        cacheService.invalidatePattern('expenses');
+        return res;
+    },
+    delete: async (id) => {
+        const res = await api.delete(`/expenses/${id}`);
+        cacheService.invalidatePattern('expenses');
+        return res;
+    },
 };
 
 // ============================================

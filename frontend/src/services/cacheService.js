@@ -32,6 +32,14 @@ class CacheService {
     invalidate(key) {
         this.cache.delete(key);
     }
+
+    invalidatePattern(prefix) {
+        for (const key of this.cache.keys()) {
+            if (key.startsWith(prefix)) {
+                this.cache.delete(key);
+            }
+        }
+    }
 }
 
 export const cacheService = new CacheService();

@@ -97,13 +97,13 @@ const Header = () => {
                         <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-soft overflow-hidden relative">
                             {labInfo.logo ? (
                                 <>
-                                    <img 
-                                        src={labInfo.logo.startsWith('data:image') 
-                                            ? labInfo.logo 
-                                            : labInfo.logo.startsWith('http') 
-                                                ? labInfo.logo 
-                                                : `${import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000'}${labInfo.logo}`} 
-                                        alt="Logo" 
+                                    <img
+                                        src={labInfo.logo.startsWith('data:image')
+                                            ? labInfo.logo
+                                            : labInfo.logo.startsWith('http')
+                                                ? labInfo.logo
+                                                : `${import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000'}${labInfo.logo}`}
+                                        alt="Logo"
                                         className="w-full h-full object-cover"
                                         onError={(e) => {
                                             e.target.style.display = 'none';
@@ -124,6 +124,13 @@ const Header = () => {
                     </div>
                 </div>
 
+                {/* Center: Branding */}
+                <div className="hidden lg:block absolute left-1/2 transform -translate-x-1/2">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">
+                        All rights reserved by <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent font-black">Ms tech Hive</span>
+                    </p>
+                </div>
+
                 {/* Right: Actions & Profile */}
                 <div className="flex items-center gap-6">
                     {/* Quick Billing Button - Standout Action */}
@@ -138,7 +145,7 @@ const Header = () => {
 
                     <div className="flex items-center gap-4">
                         {/* Fullscreen Toggle */}
-                        <button 
+                        <button
                             onClick={toggleFullscreen}
                             className="p-2 hover:bg-gray-50 rounded-lg transition-colors group"
                             title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
